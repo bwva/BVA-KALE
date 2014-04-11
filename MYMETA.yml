@@ -1,0 +1,24 @@
+---
+abstract: 'An evolution from private Perl library BVA::XUI'
+author:
+  - 'Bruce W Van Allen <bva@cruzio.com>'
+build_requires:
+  Test::More: 0
+configure_requires:
+  Module::Build: 0
+dynamic_config: 0
+generated_by: 'Module::Build version 0.3901, CPAN::Meta::Converter version 2.120921'
+license: artistic_2
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: BVA-KALE
+provides:
+  BVA::KALE:
+    file: lib/BVA/KALE.pm
+    version: 0.9003
+requires:
+  BVA::XUI: 3.6
+resources:
+  license: http://opensource.org/licenses/artistic-license-2.0.php
+version: 0.9003
