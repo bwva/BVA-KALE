@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CurrentWorkingDirectory</key>
+	<string>/Users/bwva</string>
+	<key>WorksheetContents</key>
+	<string>
+perl /Users/bwva/Library/perl5/lib/perl5/BVA/KALE/t/DATA/WHERE/db_make_selector.t show_subs=0 show_first_round=1 verbose=0 exact_sttmt=0
+
+#-#-#
+
+ok 1 - mark should be 'SUP'
+ok 2 - dbx_connect should load db
+
+** Text 1:
+last=jones
+ok 3 - Should be no errors on valid statement 1.
+# 	last=jones
+ok 4 - Should be no errors in re-done selector for statement 1.
+ok 5 # skip Set to skip with 'exact_sttmt'.
+ok 6 - Should be no errors in re-done selector from secondary selector for statement 1.
+ok 7 - re-done 'where' should be same as secondary, at statement 1
+# 	last=jones
+
+** Text 2:
+last=smith AND home_city=santa Cruz AND address+ ^ H 
+ok 8 - Should be no errors on valid statement 2.
+# 	last=smith AND home_city=santa Cruz AND (home_address^H  OR work_address^H  OR alt_address^H  OR use_for_mail_address^H  OR mail_address1^H  OR mail_address2^H )
+ok 9 - Should be no errors in re-done selector for statement 2.
+ok 10 # skip Set to skip with 'exact_sttmt'.
+ok 11 - Should be no errors in re-done selector from secondary selector for statement 2.
+ok 12 - re-done 'where' should be same as secondary, at statement 2
+# 	(last=smith AND home_city=santa Cruz) AND (home_address^H OR work_address^H OR alt_address^H OR use_for_mail_address^H OR mail_address1^H OR mail_address2^H )
+
+** Text 3:
+(last=smith AND (home_city=Santa Cruz OR (home_zip=95060 OR home_zip=95062))) AND (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+ok 13 - Should be no errors on valid statement 3.
+# 	((last=smith AND (home_city=Santa Cruz OR (home_zip=95060 OR home_zip=95062))) AND (last=jones AND (home_city=Capitola OR home_zip=95010))) OR ?=whatever
+ok 14 - Should be no errors in re-done selector for statement 3.
+ok 15 # skip Set to skip with 'exact_sttmt'.
+ok 16 - Should be no errors in re-done selector from secondary selector for statement 3.
+ok 17 - re-done 'where' should be same as secondary, at statement 3
+# 	((last=smith AND (home_city=Santa Cruz OR (home_zip=95060 OR home_zip=95062))) AND (last=jones AND (home_city=Capitola OR home_zip=95010))) OR ?=whatever
+
+** Text 4:
+last=jones AND (home_city=Capitola OR home_zip=95010)
+ok 18 - Should be no errors on valid statement 4.
+# 	last=jones AND (home_city=Capitola OR home_zip=95010)
+ok 19 - Should be no errors in re-done selector for statement 4.
+ok 20 # skip Set to skip with 'exact_sttmt'.
+ok 21 - Should be no errors in re-done selector from secondary selector for statement 4.
+ok 22 - re-done 'where' should be same as secondary, at statement 4
+# 	last=jones AND (home_city=Capitola OR home_zip=95010)
+
+** Text 5:
+last=jones AND (home_city=Capitola OR home_zip=95010
+ok 23 - Expected error on invalid statement 5.
+# 	_NONE_
+ok 24 # skip because original selector had errors for statement 5.
+
+** Text 6:
+last=jones AND (home_city=Capitola OR home_zip=95010) OR ?=whatever
+ok 25 - Should be no errors on valid statement 6.
+# 	(last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+ok 26 - Should be no errors in re-done selector for statement 6.
+ok 27 # skip Set to skip with 'exact_sttmt'.
+ok 28 - Should be no errors in re-done selector from secondary selector for statement 6.
+ok 29 - re-done 'where' should be same as secondary, at statement 6
+# 	(last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+
+** Text 7:
+last=smith AND (home_city=Santa Cruz OR home_zip=95060) OR last=jones AND (home_city=Capitola OR home_zip=95010) OR ?=whatever
+ok 30 - Should be no errors on valid statement 7.
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+ok 31 - Should be no errors in re-done selector for statement 7.
+ok 32 # skip Set to skip with 'exact_sttmt'.
+ok 33 - Should be no errors in re-done selector from secondary selector for statement 7.
+ok 34 - re-done 'where' should be same as secondary, at statement 7
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+
+** Text 8:
+(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+ok 35 - Should be no errors on valid statement 8.
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+ok 36 - Should be no errors in re-done selector for statement 8.
+ok 37 # skip Set to skip with 'exact_sttmt'.
+ok 38 - Should be no errors in re-done selector from secondary selector for statement 8.
+ok 39 - re-done 'where' should be same as secondary, at statement 8
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+
+** Text 9:
+(home_city=Santa Cruz OR home_zip=95060) OR last=jones AND (home_city=Capitola OR home_zip=95010)
+ok 40 - Should be no errors on valid statement 9.
+# 	(home_city=Santa Cruz OR home_zip=95060) OR (last=jones AND (home_city=Capitola OR home_zip=95010))
+ok 41 - Should be no errors in re-done selector for statement 9.
+ok 42 # skip Set to skip with 'exact_sttmt'.
+ok 43 - Should be no errors in re-done selector from secondary selector for statement 9.
+ok 44 - re-done 'where' should be same as secondary, at statement 9
+# 	(home_city=Santa Cruz OR home_zip=95060) OR (last=jones AND (home_city=Capitola OR home_zip=95010))
+
+** Text 10:
+(city+=santa Cruz OR city+=capitola) AND lastname=smith
+ok 45 - Expected error on invalid statement 10.
+# 	_NONE_
+ok 46 # skip because original selector had errors for statement 10.
+
+** Text 11:
+rec_id !* AND (first=Tex OR mid=Tex) AND (home_city=santa cruz OR work_city=santa cruz) AND (home_zip ^ 950 OR work_zip ^ 95)
+ok 47 - Should be no errors on valid statement 11.
+# 	(rec_id!* AND (first=Tex OR mid=Tex)) AND (home_city=santa cruz OR work_city=santa cruz) AND (home_zip^950 OR work_zip^95)
+ok 48 - Should be no errors in re-done selector for statement 11.
+ok 49 # skip Set to skip with 'exact_sttmt'.
+ok 50 - Should be no errors in re-done selector from secondary selector for statement 11.
+ok 51 - re-done 'where' should be same as secondary, at statement 11
+# 	(rec_id!* AND (first=Tex OR mid=Tex)) AND (home_city=santa cruz OR work_city=santa cruz) AND (home_zip^950 OR work_zip^95)
+
+** Text 12:
+last=smith AND ((home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) OR (home_city=capitola OR work_city=capitola OR alt_city=capitola))
+ok 52 - Should be no errors on valid statement 12.
+# 	last=smith AND ((home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) OR (home_city=capitola OR work_city=capitola OR alt_city=capitola))
+ok 53 - Should be no errors in re-done selector for statement 12.
+ok 54 # skip Set to skip with 'exact_sttmt'.
+ok 55 - Should be no errors in re-done selector from secondary selector for statement 12.
+ok 56 - re-done 'where' should be same as secondary, at statement 12
+# 	last=smith AND ((home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) OR (home_city=capitola OR work_city=capitola OR alt_city=capitola))
+
+** Text 13:
+last=smith AND (city+=santa Cruz OR city+=capitola)
+ok 57 - Should be no errors on valid statement 13.
+# 	last=smith AND ((home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) OR (home_city=capitola OR work_city=capitola OR alt_city=capitola))
+ok 58 - Should be no errors in re-done selector for statement 13.
+ok 59 # skip Set to skip with 'exact_sttmt'.
+ok 60 - Should be no errors in re-done selector from secondary selector for statement 13.
+ok 61 - re-done 'where' should be same as secondary, at statement 13
+# 	last=smith AND ((home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) OR (home_city=capitola OR work_city=capitola OR alt_city=capitola))
+
+** Text 14:
+(home_city = santa Cruz OR work_city = santa Cruz OR alt_city = santa Cruz) AND (home_city = capitola OR work_city = capitola OR alt_city = capitola)
+ok 62 - Should be no errors on valid statement 14.
+# 	(home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) AND (home_city=capitola OR work_city=capitola OR alt_city=capitola)
+ok 63 - Should be no errors in re-done selector for statement 14.
+ok 64 # skip Set to skip with 'exact_sttmt'.
+ok 65 - Should be no errors in re-done selector from secondary selector for statement 14.
+ok 66 - re-done 'where' should be same as secondary, at statement 14
+# 	(home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) AND (home_city=capitola OR work_city=capitola OR alt_city=capitola)
+
+** Text 15:
+((home_city = santa Cruz OR work_city = santa Cruz OR alt_city = santa Cruz) OR (home_city = capitola OR work_city = capitola OR alt_city = capitola))
+ok 67 - Should be no errors on valid statement 15.
+# 	(home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) OR (home_city=capitola OR work_city=capitola OR alt_city=capitola)
+ok 68 - Should be no errors in re-done selector for statement 15.
+ok 69 # skip Set to skip with 'exact_sttmt'.
+ok 70 - Should be no errors in re-done selector from secondary selector for statement 15.
+ok 71 - re-done 'where' should be same as secondary, at statement 15
+# 	(home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) OR (home_city=capitola OR work_city=capitola OR alt_city=capitola)
+
+** Text 16:
+city+ ^ san AND home_zip+ ^ 95
+ok 72 - Should be no errors on valid statement 16.
+# 	(home_city^san OR work_city^san OR alt_city^san) AND (home_zip^95 OR home_zip_four^95 OR home_zip_plus_four^95)
+ok 73 - Should be no errors in re-done selector for statement 16.
+ok 74 # skip Set to skip with 'exact_sttmt'.
+ok 75 - Should be no errors in re-done selector from secondary selector for statement 16.
+ok 76 - re-done 'where' should be same as secondary, at statement 16
+# 	(home_city^san OR work_city^san OR alt_city^san) AND (home_zip^95 OR home_zip_four^95 OR home_zip_plus_four^95)
+
+** Text 17:
+city+ ^ san AND home_zip+ ^ 95)
+ok 77 - Expected error on invalid statement 17.
+# 	_NONE_
+ok 78 # skip because original selector had errors for statement 17.
+
+** Text 18:
+(city+ ^ san AND home_zip+ ^ 95
+ok 79 - Expected error on invalid statement 18.
+# 	_NONE_
+ok 80 # skip because original selector had errors for statement 18.
+
+** Text 19:
+last ^ van AND ((home_city = santa Cruz OR work_city = santa Cruz OR alt_city = santa Cruz) OR (home_city = capitola OR work_city = capitola OR alt_city = capitola))
+ok 81 - Should be no errors on valid statement 19.
+# 	last^van AND ((home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) OR (home_city=capitola OR work_city=capitola OR alt_city=capitola))
+ok 82 - Should be no errors in re-done selector for statement 19.
+ok 83 # skip Set to skip with 'exact_sttmt'.
+ok 84 - Should be no errors in re-done selector from secondary selector for statement 19.
+ok 85 - re-done 'where' should be same as secondary, at statement 19
+# 	last^van AND ((home_city=santa Cruz OR work_city=santa Cruz OR alt_city=santa Cruz) OR (home_city=capitola OR work_city=capitola OR alt_city=capitola))
+
+** Text 20:
+alerts=~(Yes|No|Maybe)
+ok 86 - Should be no errors on valid statement 20.
+# 	alerts=~(Yes|No|Maybe)
+ok 87 - Should be no errors in re-done selector for statement 20.
+ok 88 # skip Set to skip with 'exact_sttmt'.
+ok 89 - Should be no errors in re-done selector from secondary selector for statement 20.
+ok 90 - re-done 'where' should be same as secondary, at statement 20
+# 	alerts=~(Yes|No|Maybe)
+
+** Text 21:
+city+~(san|gil|wat) OR rec_id*
+ok 91 - Should be no errors on valid statement 21.
+# 	(home_city~(san|gil|wat) OR work_city~(san|gil|wat) OR alt_city~(san|gil|wat)) OR rec_id*
+ok 92 - Should be no errors in re-done selector for statement 21.
+ok 93 # skip Set to skip with 'exact_sttmt'.
+ok 94 - Should be no errors in re-done selector from secondary selector for statement 21.
+ok 95 - re-done 'where' should be same as secondary, at statement 21
+# 	(home_city~(san|gil|wat) OR (work_city~(san|gil|wat) OR alt_city~(san|gil|wat))) OR rec_id*
+
+** Text 22:
+( home_city~(san|gil|wat) OR work_city~(san|gil|wat) OR alt_city~(san|gil|wat) ) OR rec_id*
+ok 96 - Should be no errors on valid statement 22.
+# 	(home_city~(san|gil|wat) OR (work_city~(san|gil|wat) OR alt_city~(san|gil|wat))) OR rec_id*
+ok 97 - Should be no errors in re-done selector for statement 22.
+ok 98 # skip Set to skip with 'exact_sttmt'.
+ok 99 - Should be no errors in re-done selector from secondary selector for statement 22.
+ok 100 - re-done 'where' should be same as secondary, at statement 22
+# 	(home_city~(san|gil|wat) OR (work_city~(san|gil|wat) OR alt_city~(san|gil|wat))) OR rec_id*
+
+** Text 23:
+(home_city^san OR work_city^san OR alt_city^san) AND (email* OR alt_email* OR bad_email*)
+ok 101 - Should be no errors on valid statement 23.
+# 	(home_city^san OR work_city^san OR alt_city^san) AND (email* OR alt_email* OR bad_email*)
+ok 102 - Should be no errors in re-done selector for statement 23.
+ok 103 # skip Set to skip with 'exact_sttmt'.
+ok 104 - Should be no errors in re-done selector from secondary selector for statement 23.
+ok 105 - re-done 'where' should be same as secondary, at statement 23
+# 	(home_city^san OR work_city^san OR alt_city^san) AND (email* OR alt_email* OR bad_email*)
+
+** Text 24:
+(home_city=~(San .*|Los .*) OR work_city=~(San .*|Los .*) OR alt_city=~(San .*|Los .*))
+ok 106 - Should be no errors on valid statement 24.
+# 	home_city=~(San .*|Los .*) OR (work_city=~(San .*|Los .*) OR alt_city=~(San .*|Los .*))
+ok 107 - Should be no errors in re-done selector for statement 24.
+ok 108 # skip Set to skip with 'exact_sttmt'.
+ok 109 - Should be no errors in re-done selector from secondary selector for statement 24.
+ok 110 - re-done 'where' should be same as secondary, at statement 24
+# 	home_city=~(San .*|Los .*) OR (work_city=~(San .*|Los .*) OR alt_city=~(San .*|Los .*))
+
+** Text 25:
+home_city=~(San .*|Los .*) OR work_city=~(San .*|Los .*) OR alt_city=~(San .*|Los .*)
+ok 111 - Should be no errors on valid statement 25.
+# 	home_city=~(San .*|Los .*) OR (work_city=~(San .*|Los .*) OR alt_city=~(San .*|Los .*))
+ok 112 - Should be no errors in re-done selector for statement 25.
+ok 113 # skip Set to skip with 'exact_sttmt'.
+ok 114 - Should be no errors in re-done selector from secondary selector for statement 25.
+ok 115 - re-done 'where' should be same as secondary, at statement 25
+# 	home_city=~(San .*|Los .*) OR (work_city=~(San .*|Los .*) OR alt_city=~(San .*|Los .*))
+
+** Text 26:
+city+=~(San .*|Los .*)
+ok 116 - Should be no errors on valid statement 26.
+# 	home_city=~(San .*|Los .*) OR work_city=~(San .*|Los .*) OR alt_city=~(San .*|Los .*)
+ok 117 - Should be no errors in re-done selector for statement 26.
+ok 118 # skip Set to skip with 'exact_sttmt'.
+ok 119 - Should be no errors in re-done selector from secondary selector for statement 26.
+ok 120 - re-done 'where' should be same as secondary, at statement 26
+# 	home_city=~(San .*|Los .*) OR (work_city=~(San .*|Los .*) OR alt_city=~(San .*|Los .*))
+
+** Text 27:
+city+ ^ san
+ok 121 - Should be no errors on valid statement 27.
+# 	home_city^san OR work_city^san OR alt_city^san
+ok 122 - Should be no errors in re-done selector for statement 27.
+ok 123 # skip Set to skip with 'exact_sttmt'.
+ok 124 - Should be no errors in re-done selector from secondary selector for statement 27.
+ok 125 - re-done 'where' should be same as secondary, at statement 27
+# 	home_city^san OR work_city^san OR alt_city^san
+
+** Text 28:
+city+ ^ san AND first ^ B
+ok 126 - Should be no errors on valid statement 28.
+# 	(home_city^san OR work_city^san OR alt_city^san) AND first^B
+ok 127 - Should be no errors in re-done selector for statement 28.
+ok 128 # skip Set to skip with 'exact_sttmt'.
+ok 129 - Should be no errors in re-done selector from secondary selector for statement 28.
+ok 130 - re-done 'where' should be same as secondary, at statement 28
+# 	(home_city^san OR work_city^san OR alt_city^san) AND first^B
+
+** Text 29:
+(city+ ^ san AND home_zip+ ^ 95
+ok 131 - Expected error on invalid statement 29.
+# 	_NONE_
+ok 132 # skip because original selector had errors for statement 29.
+
+** Text 30:
+last=smith
+ok 133 - Should be no errors on valid statement 30.
+# 	last=smith
+ok 134 - Should be no errors in re-done selector for statement 30.
+ok 135 # skip Set to skip with 'exact_sttmt'.
+ok 136 - Should be no errors in re-done selector from secondary selector for statement 30.
+ok 137 - re-done 'where' should be same as secondary, at statement 30
+# 	last=smith
+
+** Text 31:
+last=smith,first^b
+ok 138 - Should be no errors on valid statement 31.
+# 	last=smith AND first^b
+ok 139 - Should be no errors in re-done selector for statement 31.
+ok 140 # skip Set to skip with 'exact_sttmt'.
+ok 141 - Should be no errors in re-done selector from secondary selector for statement 31.
+ok 142 - re-done 'where' should be same as secondary, at statement 31
+# 	last=smith AND first^b
+
+** Text 32:
+last=smith AND home_city=santa Cruz AND address+ ^ H 
+ok 143 - Should be no errors on valid statement 32.
+# 	last=smith AND home_city=santa Cruz AND (home_address^H  OR work_address^H  OR alt_address^H  OR use_for_mail_address^H  OR mail_address1^H  OR mail_address2^H )
+ok 144 - Should be no errors in re-done selector for statement 32.
+ok 145 # skip Set to skip with 'exact_sttmt'.
+ok 146 - Should be no errors in re-done selector from secondary selector for statement 32.
+ok 147 - re-done 'where' should be same as secondary, at statement 32
+# 	(last=smith AND home_city=santa Cruz) AND (home_address^H OR work_address^H OR alt_address^H OR use_for_mail_address^H OR mail_address1^H OR mail_address2^H )
+
+** Text 33:
+(home_city ^san OR work_city ^san OR alt_city ^san) AND (home_zip ^ 95 OR home_zip_four ^ 95 OR home_zip_plus_four ^ 95 OR work_zip ^ 95 OR work_zip_four ^ 95 OR work_zip_plus_four ^ 95 OR alt_zip ^ 95 OR alt_zip_four ^ 95 OR alt_zip_plus_four ^ 95 OR mail_zip ^ 95) 
+ok 148 - Should be no errors on valid statement 33.
+# 	(home_city^san OR work_city^san OR alt_city^san) AND (home_zip^95 OR home_zip_four^95 OR home_zip_plus_four^95 OR work_zip^95 OR work_zip_four^95 OR work_zip_plus_four^95 OR alt_zip^95 OR alt_zip_four^95 OR alt_zip_plus_four^95 OR mail_zip^95)
+ok 149 - Should be no errors in re-done selector for statement 33.
+ok 150 # skip Set to skip with 'exact_sttmt'.
+ok 151 - Should be no errors in re-done selector from secondary selector for statement 33.
+ok 152 - re-done 'where' should be same as secondary, at statement 33
+# 	(home_city^san OR work_city^san OR alt_city^san) AND (home_zip^95 OR home_zip_four^95 OR home_zip_plus_four^95 OR work_zip^95 OR work_zip_four^95 OR work_zip_plus_four^95 OR alt_zip^95 OR alt_zip_four^95 OR alt_zip_plus_four^95 OR mail_zip^95)
+
+** Text 34:
+((home_city ^san OR work_city ^san OR alt_city ^san) AND (home_zip ^ 95 OR home_zip_four ^ 95 OR home_zip_plus_four ^ 95 OR work_zip ^ 95 OR work_zip_four ^ 95 OR work_zip_plus_four ^ 95 OR alt_zip ^ 95 OR alt_zip_four ^ 95 OR alt_zip_plus_four ^ 95 OR mail_zip ^ 95))
+ok 153 - Should be no errors on valid statement 34.
+# 	(home_city^san OR work_city^san OR alt_city^san) AND (home_zip^95 OR home_zip_four^95 OR home_zip_plus_four^95 OR work_zip^95 OR work_zip_four^95 OR work_zip_plus_four^95 OR alt_zip^95 OR alt_zip_four^95 OR alt_zip_plus_four^95 OR mail_zip^95)
+ok 154 - Should be no errors in re-done selector for statement 34.
+ok 155 # skip Set to skip with 'exact_sttmt'.
+ok 156 - Should be no errors in re-done selector from secondary selector for statement 34.
+ok 157 - re-done 'where' should be same as secondary, at statement 34
+# 	(home_city^san OR work_city^san OR alt_city^san) AND (home_zip^95 OR home_zip_four^95 OR home_zip_plus_four^95 OR work_zip^95 OR work_zip_four^95 OR work_zip_plus_four^95 OR alt_zip^95 OR alt_zip_four^95 OR alt_zip_plus_four^95 OR mail_zip^95)
+
+** Text 35:
+last=smith AND first^W AND (home_city=santa cruz OR work_city=santa cruz OR alt_city=santa cruz) 
+ok 158 - Should be no errors on valid statement 35.
+# 	(last=smith AND first^W) AND (home_city=santa cruz OR work_city=santa cruz OR alt_city=santa cruz)
+ok 159 - Should be no errors in re-done selector for statement 35.
+ok 160 # skip Set to skip with 'exact_sttmt'.
+ok 161 - Should be no errors in re-done selector from secondary selector for statement 35.
+ok 162 - re-done 'where' should be same as secondary, at statement 35
+# 	(last=smith AND first^W) AND (home_city=santa cruz OR work_city=santa cruz OR alt_city=santa cruz)
+
+** Text 36:
+(first=Tex OR mid=Tex) AND (home_city=santa cruz OR work_city=santa cruz OR alt_city=santa cruz) 
+ok 163 - Should be no errors on valid statement 36.
+# 	(first=Tex OR mid=Tex) AND (home_city=santa cruz OR work_city=santa cruz OR alt_city=santa cruz)
+ok 164 - Should be no errors in re-done selector for statement 36.
+ok 165 # skip Set to skip with 'exact_sttmt'.
+ok 166 - Should be no errors in re-done selector from secondary selector for statement 36.
+ok 167 - re-done 'where' should be same as secondary, at statement 36
+# 	(first=Tex OR mid=Tex) AND (home_city=santa cruz OR work_city=santa cruz OR alt_city=santa cruz)
+
+** Text 37:
+((last = smith AND (home_city = Santa Cruz OR home_zip = 95060)) OR (last = jones AND (home_city = Capitola OR home_zip = 95010)) OR ? = whatever)
+ok 168 - Should be no errors on valid statement 37.
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+ok 169 - Should be no errors in re-done selector for statement 37.
+ok 170 # skip Set to skip with 'exact_sttmt'.
+ok 171 - Should be no errors in re-done selector from secondary selector for statement 37.
+ok 172 - re-done 'where' should be same as secondary, at statement 37
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+
+** Text 38:
+(last=smith AND (home_city=Santa Cruz AND (home_zip=95060 OR home_zip=95062))) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+ok 173 - Should be no errors on valid statement 38.
+# 	(last=smith AND (home_city=Santa Cruz AND (home_zip=95060 OR home_zip=95062))) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+ok 174 - Should be no errors in re-done selector for statement 38.
+ok 175 # skip Set to skip with 'exact_sttmt'.
+ok 176 - Should be no errors in re-done selector from secondary selector for statement 38.
+ok 177 - re-done 'where' should be same as secondary, at statement 38
+# 	(last=smith AND (home_city=Santa Cruz AND (home_zip=95060 OR home_zip=95062))) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+
+** Text 39:
+(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+ok 178 - Should be no errors on valid statement 39.
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+ok 179 - Should be no errors in re-done selector for statement 39.
+ok 180 # skip Set to skip with 'exact_sttmt'.
+ok 181 - Should be no errors in re-done selector from secondary selector for statement 39.
+ok 182 - re-done 'where' should be same as secondary, at statement 39
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND (home_city=Capitola OR home_zip=95010)) OR ?=whatever
+
+** Text 40:
+(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND home_city=Capitola) OR ?=whatever
+ok 183 - Should be no errors on valid statement 40.
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND home_city=Capitola) OR ?=whatever
+ok 184 - Should be no errors in re-done selector for statement 40.
+ok 185 # skip Set to skip with 'exact_sttmt'.
+ok 186 - Should be no errors in re-done selector from secondary selector for statement 40.
+ok 187 - re-done 'where' should be same as secondary, at statement 40
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR (last=jones AND home_city=Capitola) OR ?=whatever
+
+** Text 41:
+last=smith AND (home_city=Santa Cruz OR home_zip=95060)
+ok 188 - Should be no errors on valid statement 41.
+# 	last=smith AND (home_city=Santa Cruz OR home_zip=95060)
+ok 189 - Should be no errors in re-done selector for statement 41.
+ok 190 # skip Set to skip with 'exact_sttmt'.
+ok 191 - Should be no errors in re-done selector from secondary selector for statement 41.
+ok 192 - re-done 'where' should be same as secondary, at statement 41
+# 	last=smith AND (home_city=Santa Cruz OR home_zip=95060)
+
+** Text 42:
+last=smith AND (home_city=Santa Cruz OR home_zip=95060) OR ?=whatever
+ok 193 - Should be no errors on valid statement 42.
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR ?=whatever
+ok 194 - Should be no errors in re-done selector for statement 42.
+ok 195 # skip Set to skip with 'exact_sttmt'.
+ok 196 - Should be no errors in re-done selector from secondary selector for statement 42.
+ok 197 - re-done 'where' should be same as secondary, at statement 42
+# 	(last=smith AND (home_city=Santa Cruz OR home_zip=95060)) OR ?=whatever
+1..197
+</string>
+</dict>
+</plist>

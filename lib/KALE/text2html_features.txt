@@ -1,0 +1,25 @@
+	** Conversions
+	
+	* Makes headings from lines starting with one to four asterisks (*)
+		* Four asterisks - largest heading <h1>
+		* One asterisk - smallest heading <h4>
+		* Four or more spaces before the askerisk(s) make the heading centered
+	
+	* Makes blockquotes from lines starting with at least 4 spaces
+
+	* Makes paragraphs <p> from sections of text separated by blank lines
+	
+	* Puts line breaks <br> at single paragraph returns 
+	
+	* Converts two or more hyphens on otherwise blank line to a horizontal rule <hr>
+		* If immediately following a text line, this conversion provides
+		* a partial width horizontal rule <hr width='25%' align='left'>
+	
+	* Converts single hyphens at start of line to bullets
+	
+	* Converts double quotes, single quotes, and apostrophes to HTML entities
+		
+	* Converts '\' to "\n" (newline)
+	
+	* Removes extraneous blank lines
+	
