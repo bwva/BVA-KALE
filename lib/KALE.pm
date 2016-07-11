@@ -1,7 +1,7 @@
 package BVA::KALE;
 
-$BVA::KALE::VERSION			= 3.6020;
-$BVA::KALE::VERSION_DATE	= '2015-01-25';
+$BVA::KALE::VERSION			= 3.700;
+$BVA::KALE::VERSION_DATE	= '2016-07-10';
 
 use strict;
 use warnings;
@@ -17,7 +17,7 @@ BVA::KALE - Extensible User Interface!
 
 =head1 VERSION
 
-Version 3.6010
+Version 3.700
 
 =cut
 
@@ -982,7 +982,7 @@ sub flush_lifo ($) {
 
 ## Flush Trained: incrementally returns and clears the @KEY buffer, in chunks defined by first optional arg.
 ## If the arg is an arrayref, its elements are the defaults and the number of its elements
-## sets the number of @KEY elements returned.
+## sets the number of @KEY elements returned each time flush_trained is called.
 ## If the arg is a string matching the form [number] : [default],
 ## the defaults are [default], and the number sets the number of @KEY elements returned.
 ## Defaults are provided when elements fail a simple truth test [i.e., doesn't test for zero vs ''].
@@ -2245,6 +2245,8 @@ sub charge ($;@) {
 	}
 
 	%KEY		= ( %KEY, map { /^_/ ? () : ($_ => $NEW{$_}) } keys %NEW );
+	
+	return \*KEY;
 }
 
 
@@ -2269,6 +2271,8 @@ sub charge_chomped ($;@) {
 	chomp $NEW{$_} for keys %NEW;
 
 	%KEY		= ( %KEY, map { /^_/ ? () : ( $_ => $NEW{$_}) } keys %NEW );
+
+	return \*KEY;
 }
 
 
@@ -2290,6 +2294,8 @@ sub charge_meta ($;@) {
 	}
 
 	%KEY		= ( %KEY, map { /^_/ ? ($_ => $NEW{$_}) : () } keys %NEW );
+	
+	return \*KEY;
 }
 
 ## Charge_as_meta:  safely adds meta-data to %KEY, and returns updated %KEY.
@@ -2311,6 +2317,8 @@ sub charge_as_meta ($;@) {
 	}
 
 	%KEY		= ( %KEY, map { /^_/ ? ($_ => $NEW{$_}) : ("_$_" => $NEW{$_}) } keys %NEW );
+	
+	return \*KEY;
 }
 
 ## Charge_all: safely adds data and meta-data to %KEY, and returns updated %KEY.
@@ -2330,6 +2338,8 @@ sub charge_all ($;@) {
 	}
 
 	%KEY		= ( %KEY, %NEW );
+	
+	return \*KEY;
 }
 
 ## Charge_these: safely adds data and meta-data to specified fields of %KEY,
@@ -2344,6 +2354,8 @@ sub charge_these ($;@) {
 	my %NEW			= map { $_ => shift() } @flds;
 
 	%KEY		= ( %KEY, %NEW );
+	
+	return \*KEY;
 }
 
 ## Charge_auto: executes anonymous sub stored in $KEY{_auto}, and returns updated %KEY.
@@ -2355,6 +2367,8 @@ sub charge_auto ($;@) {
 		and $KEY{_auto}->();
 
 	%KEY
+	
+	return \*KEY;
 }
 
 ## Calculate: executes code references stored in %KEY, and returns updated %KEY.
@@ -2414,36 +2428,8 @@ sub calculate ($;@) {
 		$ui_obj->clear();
 	}
 	%KEY;
-}
-
-sub calculated_data ($;@) {
-	my $obj		= shift;
-	local *KEY	= ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	my @flds	= @_ ? @_ : sort grep { /^-./ } keys %KEY;
-	my $ui_obj	= $obj->direct();
-	my @calcflds;
-	for my $fld (@flds) {
-		# charge with updated COPY of %KEY each time
-		$ui_obj->charge( { %KEY } );
-		my $result;
-		if (ref($KEY{$fld}) =~ /CODE/) {
-			$result	= $KEY{$fld}->($ui_obj);
-		} elsif (ref($KEY{"-$fld"}) =~ /CODE/) {
-			$result	= $KEY{"-$fld"}->($ui_obj);
-		} else {
-			# don't process, but see charge_as_calc()
-			$result	= $KEY{$fld} || '';
-		}
-		if ($fld =~ /^-(.+)$/) {
-			$KEY{$1}	= $result;
-			push @calcflds => $1;
-		} else {
-			$KEY{$fld . '_out'}	= $result;
-			push @calcflds => $fld . '_out';
-		}
-		$ui_obj->clear();
-	}
-	return @KEY{@calcflds};
+	
+	return \*KEY;
 }
 
 ## Charge_as_calc:  safely adds calculating fields to %KEY, and returns updated %KEY.
@@ -2492,6 +2478,8 @@ sub charge_as_calc ($;@) {
 		}
 	}
 	%KEY
+	
+	return \*KEY;
 }
 
 
@@ -2507,6 +2495,8 @@ sub charge_msg ($;@) {
 	$KEY{_msg}->($arg);
 
 	%KEY
+	
+	return \*KEY;
 }
 
 ## Charge_err: safely stores a message in the internal subroutine $KEY{_err},
@@ -2519,6 +2509,8 @@ sub charge_err ($;@) {
 	$KEY{_err}->($arg);
 
 	%KEY
+	
+	return \*KEY;
 }
 
 ## Charge_xor: safely adds data and meta-data to %KEY, and returns updated %KEY.
@@ -2538,6 +2530,8 @@ sub charge_xor ($;@) {
 	}
 
 	%KEY		= ( %KEY, ( map { $KEY{$_} ? () : ( $_ => $NEW{$_} ) } keys %NEW ) );
+	
+	return \*KEY;
 }
 
 ## Charge_or: safely adds data and meta-data to %KEY, and returns updated %KEY.
@@ -2557,6 +2551,8 @@ sub charge_or ($;@) {
 	}
 
 	%KEY		= ( %KEY, ( map { exists $KEY{$_} ? () : ( $_ => $NEW{$_} )  } keys %NEW ) );
+	
+	return \*KEY;
 }
 
 ## Charge_true: safely adds data and meta-data to %KEY, and returns updated %KEY.
@@ -2576,6 +2572,8 @@ sub charge_true ($;@) {
 	}
 																		# special case for null dates
 	%KEY		= ( %KEY, ( map { $_ => $NEW{$_}  } grep { $NEW{$_} and $NEW{$_} !~ /0000-00-00/ } keys %NEW ) );
+	
+	return \*KEY;
 }
 
 ## Charge_marked:  safely adds marked input data to %KEY, and returns updated %KEY.
@@ -2602,7 +2600,8 @@ sub charge_marked ($;@) {
 	}
 
  	%KEY	= ( %KEY, %NEW );
-#	*KEY	= { %KEY, %NEW };
+	
+	return \*KEY;
 }
 
 ## Charge from input: safely adds input data to %KEY, and returns updated %KEY.
@@ -2637,6 +2636,8 @@ sub charge_from_input ($;@) {
 	}
 
  	%KEY	= ( %KEY, %NEW );
+	
+	return \*KEY;
 }
 
 ## Charge_resolve. Safely adds resolved data to fields in %KEY, and returns updated %KEY.
@@ -2661,6 +2662,8 @@ sub charge_resolve ($;@) {
 	%NEW	= map { $_ => resolve(\*KEY, $NEW{$_}) } keys %NEW;
 
 	%KEY	= ( %KEY, %NEW );
+	
+	return \*KEY;
 }
 
 ## Charge_add. Safely adds numerical data to fields in %KEY, and returns updated %KEY.
@@ -2688,6 +2691,8 @@ sub charge_add {
 						{($1 || '') . ($2||0) + $ADD{$key} . ($3 || '')}ex;
 	}
 	%KEY
+	
+	return \*KEY;
 }
 
 ## Charge_append. Safely appends data to fields in %KEY, and returns updated %KEY.
@@ -2710,6 +2715,8 @@ sub charge_append {
 		$KEY{$key}	.= $ADD{$key}
 	}
 	%KEY
+	
+	return \*KEY;
 }
 
 ## Charge_push. Safely appends data to fields in %KEY, and returns updated %KEY.
@@ -2740,9 +2747,11 @@ sub charge_push {
 		}
 	}
 	%KEY
+	
+	return \*KEY;
 }
 
-## Charge_fh. Safely writes data data to fields in %KEY, 
+## Charge_fh. Safely writes data to fields in %KEY, 
 ## treating the fields as filehandles, and returns updated %KEY.
 ## The first time a field is charged with charge_fh, 
 ## a filehandle is opened on a reference to any string in the field. 
@@ -2778,6 +2787,8 @@ sub charge_fh {
 		}		
 	}
 	%KEY;
+	
+	return \*KEY;
 }
 
 sub charge_fh_gzip {
@@ -2806,6 +2817,8 @@ sub charge_fh_gzip {
 		}		
 	}
 	%KEY;
+	
+	return \*KEY;
 }
 
 ## Clear: safely deletes data from %KEY, and returns updated %KEY.
@@ -2823,6 +2836,8 @@ sub clear ($;@) {
 		%KEY = map { (/^_/ or $_ eq $KEY{_mark}) ? ($_ => $KEY{$_}) : ($_ => '') } keys %KEY;
 	}
 	%KEY
+	
+	return \*KEY;
 }
 
 ## Clear_undef: safely deletes data from %KEY, and returns updated %KEY.
@@ -2840,6 +2855,8 @@ sub clear_undef ($;@) {
 		%KEY = map { (/^_/ or $_ eq $KEY{_mark}) ? ($_ => $KEY{$_}) : ($_ => undef) } keys %KEY;
 	}
 	%KEY
+	
+	return \*KEY;
 }
 
 ## Clear_data, clear_input, clear_marked_input
@@ -2856,6 +2873,8 @@ sub clear_data ($;@) {
 		%KEY = map { (/^_/ or $_ eq $KEY{_mark}) ? ($_ => $KEY{$_}) : () } keys %KEY;
 	}
 	%KEY
+	
+	return \*KEY;
 }
 
 ## Removes selected or all input fields & their values
@@ -2864,6 +2883,8 @@ sub clear_input ($;@) {
 	$KEY{_input}->{$_}	= '' for @_ ?  @_ : keys %{ $KEY{_input} };
 	delete $KEY{_vals}->{$_} for @_ ?  @_ : keys %{ $KEY{_vals} };
 	%KEY
+	
+	return \*KEY;
 }
 
 ## Removes selected or all marked input fields & their values
@@ -2871,6 +2892,8 @@ sub clear_marked_input ($;@) {
 	local *KEY			= *{ shift() };
 	delete $KEY{_vals}->{$_} for @_ ?  @_ : keys %{ $KEY{_vals} };
 	%KEY
+	
+	return \*KEY;
 }
 
 ## Data Access
@@ -2913,6 +2936,36 @@ sub untainted_data ($;@) {
 	local *KEY		= *{ shift() };
 # 	wantarray ? map { $KEY{$_} =~ /^([^`]+)$/ ? $1 : '' } @_ : $KEY{$_[0]} =~ /^([^`]+)$/ ? $1 : ''
 	wantarray ? map { $KEY{$_} =~ /\A([^`]+)\z/ ? $1 : '' } @_ : $KEY{$_[0]} =~ /\A([^`]+)\z/ ? $1 : ''
+}
+
+sub calculated_data ($;@) {
+	my $obj		= shift;
+	local *KEY	= ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+	my @flds	= @_ ? @_ : sort grep { /^-./ } keys %KEY;
+	my $ui_obj	= $obj->direct();
+	my @calcflds;
+	for my $fld (@flds) {
+		# charge with updated COPY of %KEY each time
+		$ui_obj->charge( { %KEY } );
+		my $result;
+		if (ref($KEY{$fld}) =~ /CODE/) {
+			$result	= $KEY{$fld}->($ui_obj);
+		} elsif (ref($KEY{"-$fld"}) =~ /CODE/) {
+			$result	= $KEY{"-$fld"}->($ui_obj);
+		} else {
+			# don't process, but see charge_as_calc()
+			$result	= $KEY{$fld} || '';
+		}
+		if ($fld =~ /^-(.+)$/) {
+			$KEY{$1}	= $result;
+			push @calcflds => $1;
+		} else {
+			$KEY{$fld . '_out'}	= $result;
+			push @calcflds => $fld . '_out';
+		}
+		$ui_obj->clear();
+	}
+	return @KEY{@calcflds};
 }
 
 sub pairs ($;@) {
