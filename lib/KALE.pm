@@ -9,7 +9,8 @@ use warnings;
 use Carp;
 use Data::Dumper;
 use IO::Handle;
-use JSON;
+use Cpanel::JSON::XS;
+#use JSON;
 
 =head1 NAME
 
@@ -2490,7 +2491,8 @@ sub calculate ($;@) {
 		}
 		$ui_obj->clear();
 	}
-	%KEY;
+	# %KEY;
+	return $obj;
 }
 
 sub calculated_data ($;@) {
