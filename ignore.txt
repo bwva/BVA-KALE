@@ -17,4 +17,5 @@ pm_to_blib
 BVA-KALE-*
 BVA-KALE-*.tar.gz
 .DS_Store
+./.DS_Store
 lib/.DS_Store
