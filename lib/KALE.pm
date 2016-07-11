@@ -884,8 +884,10 @@ sub buffer_trained {
 ## Flush: returns and clears the @KEY buffer
 sub flush ($) {
 	goto &flush_refsOK;
+	my $obj			= shift;
 	
-	local *KEY		= *{ shift() };
+	local *KEY		= $obj->invert();
+
 	my @buf;
 	my @globs;
 	foreach my $elem (@KEY) {
@@ -901,7 +903,10 @@ sub flush ($) {
 
 ## Flush: returns and clears the @KEY buffer
 sub flush_refsOK ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my @buf;
 	my @strs;
 	my @refs;
@@ -926,7 +931,10 @@ sub flush_refsOK ($) {
 
 ## Flush Next: Iterates through @KEY, returning the first valid value, which is deleted from @KEY
 sub flush_next ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my @buf;
 	my @keep;
 	foreach my $elem (@KEY) {
@@ -946,7 +954,10 @@ sub flush_next ($) {
 
 ## Flush Last: Iterates through @KEY, returning the last valid value, which is deleted from @KEY
 sub flush_last ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my @buf;
 	my @keep;
 	foreach my $elem (reverse @KEY) {
@@ -966,7 +977,10 @@ sub flush_last ($) {
 
 ## Flush_lifo: returns and clears the @KEY buffer, last in first out
 sub flush_lifo ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my @buf;
 	my @globs;
 	foreach my $elem (@KEY) {
@@ -987,7 +1001,10 @@ sub flush_lifo ($) {
 ## the defaults are [default], and the number sets the number of @KEY elements returned.
 ## Defaults are provided when elements fail a simple truth test [i.e., doesn't test for zero vs ''].
 sub flush_trained ($;$) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my $pattern		= shift();
 
 	my $num_elems;
@@ -1024,7 +1041,10 @@ sub flush_trained ($;$) {
 }
 
 sub flush_random ($;$) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my $size		= shift();
 
 	my $num_elems;
@@ -1058,7 +1078,10 @@ sub flush_random ($;$) {
 
 ## read
 sub read_buffer ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my @buf;
 	my @globs;
 	foreach my $elem (@KEY) {
@@ -1074,21 +1097,30 @@ sub read_buffer ($) {
 
 ## Read_fifo: returns the @KEY buffer, first in first out
 sub read_fifo ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
  	return grep { ! ref($_) eq __PACKAGE__ } @KEY;
 }
 
 
 ## Read_lifo: returns the @KEY buffer, last in first out
 sub read_lifo ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
  	return reverse grep { ! ref($_) eq __PACKAGE__ } @KEY;
 }
 
 ## Read_unique: returns the @KEY buffer, unique values only.
 ## Optional args are added to @KEY, dereferencing any arg found to be an array ref
 sub read_unique ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %found;
 	return map {
  		$found{$_}++ ? () : $_ } grep { ! ref($_) eq __PACKAGE__
@@ -1098,7 +1130,10 @@ sub read_unique ($;@) {
 ## Read_except: returns the @KEY buffer, excluding any values matching
 ## any optional args, dereferencing any arg found to be an array ref
 sub read_except ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %exceptions	= map { ($_ => 1) } map { ref($_) =~ /ARRAY/ ? @{ $_ } : $_ } @_;
  	return grep { ! ( $exceptions{$_} || ref($_) eq __PACKAGE__ ) } @KEY;
 }
@@ -2023,7 +2058,10 @@ sub retrieve_data {
 ## Retrieve: Analogous to flush; reads and returns contents of file
 ## to which store() has written, and empties the file.
 sub retrieve ($) {
- 	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 
 	local $/ = undef;
 
@@ -2057,7 +2095,10 @@ sub retrieve ($) {
 ## second optional arg, if any, or Perl's $/, usually \n. The
 ## second arg may be any string; it's chomped off.
 sub recall ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 
 	my $reverse		= shift() ? 1 : 0;
 
@@ -2106,7 +2147,10 @@ sub recall ($;@) {
 ## A non-zero value in the fourth arg causes the byte number of
 ## each match to be returned; this may be used by recall_seek().
 sub recall_match ($$;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 
 	my $match		= shift() or return wantarray ? () : '';
 
@@ -2161,7 +2205,9 @@ sub recall_match ($$;@) {
 ## Recall_seek: reads the file to which store()
 ## has written,
 sub recall_seek ($$;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
 
 	my $tell		= shift() || 0;
 
@@ -2231,7 +2277,10 @@ sub form ($;@) {
 ## Over-writes existing fields with the same names, but doesn't
 ## accept any data from fields whose names start with '_'.
 sub charge ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+	
 	my %NEW;
 	{
 	local $_ = ref($_[0]);
@@ -2246,7 +2295,7 @@ sub charge ($;@) {
 
 	%KEY		= ( %KEY, map { /^_/ ? () : ($_ => $NEW{$_}) } keys %NEW );
 	
-	return \*KEY;
+	return $obj;
 }
 
 
@@ -2255,7 +2304,10 @@ sub charge ($;@) {
 ## accept any data from fields whose names start with '_'.
 ## Removes system end-of-line
 sub charge_chomped ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %NEW;
 	{
 	local $_ = ref($_[0]);
@@ -2271,8 +2323,8 @@ sub charge_chomped ($;@) {
 	chomp $NEW{$_} for keys %NEW;
 
 	%KEY		= ( %KEY, map { /^_/ ? () : ( $_ => $NEW{$_}) } keys %NEW );
-
-	return \*KEY;
+	
+	return $obj;
 }
 
 
@@ -2280,7 +2332,10 @@ sub charge_chomped ($;@) {
 ## Similar to charge, but only accepts data from fields whose names start with '_'.
 ## Over-writes existing fields with same names.
 sub charge_meta ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %NEW;
 	{
 	local $_ = ref($_[0]);
@@ -2295,7 +2350,7 @@ sub charge_meta ($;@) {
 
 	%KEY		= ( %KEY, map { /^_/ ? ($_ => $NEW{$_}) : () } keys %NEW );
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_as_meta:  safely adds meta-data to %KEY, and returns updated %KEY.
@@ -2303,7 +2358,10 @@ sub charge_meta ($;@) {
 ## Adds '_' to the start of field names that don't already have it.
 ## Over-writes existing fields with same names.
 sub charge_as_meta ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %NEW;
 	{
 	local $_ = ref($_[0]);
@@ -2318,13 +2376,16 @@ sub charge_as_meta ($;@) {
 
 	%KEY		= ( %KEY, map { /^_/ ? ($_ => $NEW{$_}) : ("_$_" => $NEW{$_}) } keys %NEW );
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_all: safely adds data and meta-data to %KEY, and returns updated %KEY.
 ## Over-writes existing fields with the same names.
 sub charge_all ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %NEW;
 	{
 	local $_ = ref($_[0]);
@@ -2339,7 +2400,7 @@ sub charge_all ($;@) {
 
 	%KEY		= ( %KEY, %NEW );
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_these: safely adds data and meta-data to specified fields of %KEY,
@@ -2348,27 +2409,29 @@ sub charge_all ($;@) {
 ## The following args are the values, in order of the listed fields.
 ## Over-writes existing fields with the same names.
 sub charge_these ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my $flds		= shift();
 	my @flds		= ref($flds) ? @{ $flds } : split( /\s*,\s*/ => $flds);
 	my %NEW			= map { $_ => shift() } @flds;
 
 	%KEY		= ( %KEY, %NEW );
-	
-	return \*KEY;
 }
 
 ## Charge_auto: executes anonymous sub stored in $KEY{_auto}, and returns updated %KEY.
 ## $KEY{_auto} may hold any series of actions, usually including charge methods.
 ## Executed for each UI object by render() just before rendering.
 sub charge_auto ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	$KEY{_auto}
 		and $KEY{_auto}->();
-
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Calculate: executes code references stored in %KEY, and returns updated %KEY.
@@ -2428,8 +2491,36 @@ sub calculate ($;@) {
 		$ui_obj->clear();
 	}
 	%KEY;
-	
-	return \*KEY;
+}
+
+sub calculated_data ($;@) {
+	my $obj		= shift;
+	local *KEY	= ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+	my @flds	= @_ ? @_ : sort grep { /^-./ } keys %KEY;
+	my $ui_obj	= $obj->direct();
+	my @calcflds;
+	for my $fld (@flds) {
+		# charge with updated COPY of %KEY each time
+		$ui_obj->charge( { %KEY } );
+		my $result;
+		if (ref($KEY{$fld}) =~ /CODE/) {
+			$result	= $KEY{$fld}->($ui_obj);
+		} elsif (ref($KEY{"-$fld"}) =~ /CODE/) {
+			$result	= $KEY{"-$fld"}->($ui_obj);
+		} else {
+			# don't process, but see charge_as_calc()
+			$result	= $KEY{$fld} || '';
+		}
+		if ($fld =~ /^-(.+)$/) {
+			$KEY{$1}	= $result;
+			push @calcflds => $1;
+		} else {
+			$KEY{$fld . '_out'}	= $result;
+			push @calcflds => $fld . '_out';
+		}
+		$ui_obj->clear();
+	}
+	return @KEY{@calcflds};
 }
 
 ## Charge_as_calc:  safely adds calculating fields to %KEY, and returns updated %KEY.
@@ -2441,7 +2532,10 @@ sub calculate ($;@) {
 ## The result of a calculation is put in the corresponding data field
 ## named without the starting '-'.
 sub charge_as_calc ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %NEW;
 	my $new_type	= ref($_[0]);
 	if ($new_type 		=~ /HASH/) {
@@ -2477,9 +2571,8 @@ sub charge_as_calc ($;@) {
 			$KEY{"-$k"} = sub { return $c; };
 		}
 	}
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 
@@ -2488,35 +2581,40 @@ sub charge_as_calc ($;@) {
 ## The first optional arg is a string or a hash reference, following the
 ## requirements of make_msg
 sub charge_msg ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my $arg			= shift;
 	$KEY{_msg}		||= make_msg(\*KEY);
 
 	$KEY{_msg}->($arg);
-
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_err: safely stores a message in the internal subroutine $KEY{_err},
 ## creating $KEY{_err} if necessary with make_msg().
 sub charge_err ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my $arg			= shift;
 	$KEY{_err}		||= make_msg(\*KEY);
 
 	$KEY{_err}->($arg);
-
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_xor: safely adds data and meta-data to %KEY, and returns updated %KEY.
 ## Over-writes existing fields with the same names only in fields evaluating to false.
 sub charge_xor ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %NEW;
 	{
 	local $_ = ref($_[0]);
@@ -2531,13 +2629,16 @@ sub charge_xor ($;@) {
 
 	%KEY		= ( %KEY, ( map { $KEY{$_} ? () : ( $_ => $NEW{$_} ) } keys %NEW ) );
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_or: safely adds data and meta-data to %KEY, and returns updated %KEY.
 ## Does not over-write existing fields with the same names.
 sub charge_or ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %NEW;
 	{
 	local $_ = ref($_[0]);
@@ -2552,13 +2653,16 @@ sub charge_or ($;@) {
 
 	%KEY		= ( %KEY, ( map { exists $KEY{$_} ? () : ( $_ => $NEW{$_} )  } keys %NEW ) );
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_true: safely adds data and meta-data to %KEY, and returns updated %KEY.
 ## Over-writes existing fields with the same names only if the new data evaluates to 'true'.
 sub charge_true ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %NEW;
 	{
 	local $_ = ref($_[0]);
@@ -2573,7 +2677,7 @@ sub charge_true ($;@) {
 																		# special case for null dates
 	%KEY		= ( %KEY, ( map { $_ => $NEW{$_}  } grep { $NEW{$_} and $NEW{$_} !~ /0000-00-00/ } keys %NEW ) );
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_marked:  safely adds marked input data to %KEY, and returns updated %KEY.
@@ -2582,7 +2686,10 @@ sub charge_true ($;@) {
 ## If no argument is given, inserts marked input data stored in $KEY{$KEY{_mark}} (same as $KEY{_vals}).
 ## Over-writes existing fields with same names (with the mark stripped off).
 sub charge_marked ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	unless ( @_ ) {
 		*KEY	= { %KEY, %{ $KEY{$KEY{_mark}} || {} } };
 		return %KEY
@@ -2600,8 +2707,9 @@ sub charge_marked ($;@) {
 	}
 
  	%KEY	= ( %KEY, %NEW );
+#	*KEY	= { %KEY, %NEW };
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge from input: safely adds input data to %KEY, and returns updated %KEY.
@@ -2617,7 +2725,10 @@ sub charge_marked ($;@) {
 ## SUP->charge_from_input('SUP:first'); # stores 'A' in its 'first' field
 ## SUP->charge_from_input('CON:first'); # stores 'B' in its 'CON:first' field
 sub charge_from_input ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	unless ( @_ ) {
 		return %KEY
 	}
@@ -2637,7 +2748,7 @@ sub charge_from_input ($;@) {
 
  	%KEY	= ( %KEY, %NEW );
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_resolve. Safely adds resolved data to fields in %KEY, and returns updated %KEY.
@@ -2646,7 +2757,10 @@ sub charge_from_input ($;@) {
 ## defaults to using _start => '[', _end => ']', _mark => ':', as in, e.g.,
 ## $obj->charge_resolve('settings_file' => '[:system_dir]/settings.config');
 sub charge_resolve ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %NEW;
 	{
 	local $_ = ref($_[0]);
@@ -2663,7 +2777,7 @@ sub charge_resolve ($;@) {
 
 	%KEY	= ( %KEY, %NEW );
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_add. Safely adds numerical data to fields in %KEY, and returns updated %KEY.
@@ -2671,7 +2785,10 @@ sub charge_resolve ($;@) {
 ## An input value may be any expression that resolves to a number (integer or float).
 ## Does nothing if an input value is not a number. Starts with zero value.
 sub charge_add {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %ADD;
 	return %KEY unless @_;
 
@@ -2690,15 +2807,17 @@ sub charge_add {
 		$KEY{$key} =~ s{^ (.*?)? ([+-]?\d+(?:\.\d*)?|) ([^\d]+)? $}
 						{($1 || '') . ($2||0) + $ADD{$key} . ($3 || '')}ex;
 	}
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_append. Safely appends data to fields in %KEY, and returns updated %KEY.
 ## Note that NO white space or other separator is inserted between the original and appended values.
 sub charge_append {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %ADD;
 	return %KEY unless @_;
 
@@ -2714,9 +2833,8 @@ sub charge_append {
 	for my $key (keys %ADD) {
 		$KEY{$key}	.= $ADD{$key}
 	}
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_push. Safely appends data to fields in %KEY, and returns updated %KEY.
@@ -2724,7 +2842,10 @@ sub charge_append {
 ## the value of the field is a reference to that array. Any value in the field
 ## before charge_push becomes the first element of the anonymous array.
 sub charge_push {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %ADD;
 	return %KEY unless @_;
 
@@ -2746,9 +2867,8 @@ sub charge_push {
 			$KEY{$key}	= [$ADD{$key}];
 		}
 	}
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Charge_fh. Safely writes data to fields in %KEY, 
@@ -2762,7 +2882,10 @@ sub charge_push {
 ## The filehandle is opened for read & append (+>>), and is left open
 ##  until explicitly closed or when the UI object is destroyed.
 sub charge_fh {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %ADD;
 	return %KEY unless @_;
 
@@ -2786,13 +2909,15 @@ sub charge_fh {
 			$KEY{$ref_key}	= $fh;
 		}		
 	}
-	%KEY;
 	
-	return \*KEY;
+	return $obj;
 }
 
 sub charge_fh_gzip {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my %ADD;
 	return %KEY unless @_;
 
@@ -2816,9 +2941,8 @@ sub charge_fh_gzip {
 			$KEY{$ref_key}	= $fh;
 		}		
 	}
-	%KEY;
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Clear: safely deletes data from %KEY, and returns updated %KEY.
@@ -2829,15 +2953,17 @@ sub charge_fh_gzip {
 ## Fields whose data is deleted receive the value ''.
 ## Meta_data (fieldnames starting with '_') is not deleted.
 sub clear ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	if (@_) {
 		$KEY{$_} = '' for grep { !/^_/ } @_
 	} else {
 		%KEY = map { (/^_/ or $_ eq $KEY{_mark}) ? ($_ => $KEY{$_}) : ($_ => '') } keys %KEY;
 	}
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Clear_undef: safely deletes data from %KEY, and returns updated %KEY.
@@ -2848,15 +2974,17 @@ sub clear ($;@) {
 ## Fields whose data is deleted receive the value undef.
 ## Meta_data (fieldnames starting with '_') is not deleted.
 sub clear_undef ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	if (@_) {
 		$KEY{$_} = '' for grep { !/^_/ } @_
 	} else {
 		%KEY = map { (/^_/ or $_ eq $KEY{_mark}) ? ($_ => $KEY{$_}) : ($_ => undef) } keys %KEY;
 	}
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Clear_data, clear_input, clear_marked_input
@@ -2866,172 +2994,211 @@ sub clear_undef ($;@) {
 ## which holds marked input data.
 ## Meta_data (fieldnames starting with '_') is not deleted.
 sub clear_data ($;@) {
-	local *KEY			= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	if (@_) {
 		delete $KEY{$_} for grep { !/^_/ } @_
 	} else {
 		%KEY = map { (/^_/ or $_ eq $KEY{_mark}) ? ($_ => $KEY{$_}) : () } keys %KEY;
 	}
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Removes selected or all input fields & their values
 sub clear_input ($;@) {
-	local *KEY			= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	$KEY{_input}->{$_}	= '' for @_ ?  @_ : keys %{ $KEY{_input} };
 	delete $KEY{_vals}->{$_} for @_ ?  @_ : keys %{ $KEY{_vals} };
-	%KEY
 	
-	return \*KEY;
+	return $obj;
 }
 
 ## Removes selected or all marked input fields & their values
 sub clear_marked_input ($;@) {
-	local *KEY			= *{ shift() };
-	delete $KEY{_vals}->{$_} for @_ ?  @_ : keys %{ $KEY{_vals} };
-	%KEY
+	my $obj			= shift;
 	
-	return \*KEY;
+	local *KEY		= $obj->invert();
+
+	delete $KEY{_vals}->{$_} for @_ ?  @_ : keys %{ $KEY{_vals} };
+	
+	return $obj;
 }
 
 ## Data Access
 sub list_keys ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	grep {!/^_/} keys %KEY
 }
 
 sub list_values ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	map { $KEY{$_} } grep {!/^_/} keys %KEY
 }
 
 sub list_pairs ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	map {"$_:  $KEY{$_}"} grep {!/^_/} keys %KEY
 }
 
 sub list_meta_keys ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	grep {/^_/} keys %KEY
 }
 
 sub list_meta_values ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	map { $KEY{$_} } grep {/^_/} keys %KEY
 }
 
 sub list_meta_pairs ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	map {"$_:  $KEY{$_}"} grep {/^_/} keys %KEY
 }
 
 sub data ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	wantarray ? map { $KEY{$_} || '' } @_ : $KEY{$_[0]} || ''
 }
 
 sub untainted_data ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 # 	wantarray ? map { $KEY{$_} =~ /^([^`]+)$/ ? $1 : '' } @_ : $KEY{$_[0]} =~ /^([^`]+)$/ ? $1 : ''
 	wantarray ? map { $KEY{$_} =~ /\A([^`]+)\z/ ? $1 : '' } @_ : $KEY{$_[0]} =~ /\A([^`]+)\z/ ? $1 : ''
 }
 
-sub calculated_data ($;@) {
-	my $obj		= shift;
-	local *KEY	= ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	my @flds	= @_ ? @_ : sort grep { /^-./ } keys %KEY;
-	my $ui_obj	= $obj->direct();
-	my @calcflds;
-	for my $fld (@flds) {
-		# charge with updated COPY of %KEY each time
-		$ui_obj->charge( { %KEY } );
-		my $result;
-		if (ref($KEY{$fld}) =~ /CODE/) {
-			$result	= $KEY{$fld}->($ui_obj);
-		} elsif (ref($KEY{"-$fld"}) =~ /CODE/) {
-			$result	= $KEY{"-$fld"}->($ui_obj);
-		} else {
-			# don't process, but see charge_as_calc()
-			$result	= $KEY{$fld} || '';
-		}
-		if ($fld =~ /^-(.+)$/) {
-			$KEY{$1}	= $result;
-			push @calcflds => $1;
-		} else {
-			$KEY{$fld . '_out'}	= $result;
-			push @calcflds => $fld . '_out';
-		}
-		$ui_obj->clear();
-	}
-	return @KEY{@calcflds};
-}
-
 sub pairs ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	map { $_ => ($KEY{$_} || '') } grep {!/^_/} @_ ? @_ : keys %KEY
 }
 
 sub meta_pairs ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	map { $_ => $KEY{$_} } grep {/^_/} @_ ? @_ : keys %KEY
 }
 
 sub input_data ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	wantarray ? map { $KEY{_input}->{$_} || '' } @_ : $KEY{_input}->{$_[0]} || ''
 }
 
 sub input_keys ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	return keys %{ $KEY{_input} }
 }
 
 sub input_pairs ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	map { $_ => ($KEY{_input}->{$_} || '') } keys %{ $KEY{_input} }
 }
 
 sub marked_input_data ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	wantarray ? map { $KEY{_vals}->{$_} || '' } @_ : ($_[0] ? $KEY{_vals}->{$_[0]} || '' : '')
 }
 
 sub marked_input_keys ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	return keys %{ $KEY{_vals} || () }
 }
 
 sub marked_input_pairs ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	@_ ? map { $_ => (defined($KEY{_vals}->{$_}) ? $KEY{_vals}->{$_} : '') } @_ : %{ $KEY{_vals} || () }
 }
 
 sub input ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	$KEY{_input}
 }
 
 sub marked_input ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	$KEY{_vals}
 }
 
 sub uploads ($;@) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	$KEY{_uploads}
 }
 
 sub uploads_by_field {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	my @flds	= @_ ? @_ : keys %{ $KEY{_uploads} };
 	my @uploads	= map { defined($KEY{_uploads}->{$_}) ? $KEY{_uploads}->{$_} : () } @flds;
  	return wantarray ? @uploads : $uploads[0];
 }
 
 sub request ($) {
-	local *KEY		= *{ shift() };
+	my $obj			= shift;
+	
+	local *KEY		= $obj->invert();
+
 	$KEY{_request}
 }
 
