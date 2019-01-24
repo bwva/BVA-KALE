@@ -1,6 +1,6 @@
 package BVA::KALE::DATA;
 
-$BVA::KALE::DATA::VERSION	= '4.030_001';	# 2013-03-06 bva@cruzio.com
+$BVA::KALE::DATA::VERSION	= '4.04_001';	# 2018-04-01 bva@cruzio.com
 
 use strict;
 use warnings;
@@ -35,7 +35,7 @@ sub init {
 		_item_sep		=> $args{item_sep}						|| ',|;',
 		_record_out_sep	=> $args{record_out_sep}				|| "\n",
 		_idx_sep		=> $args{idx_sep}						|| "\n\n",
-		_table_col_sep	=> $args{_table_col_sep}				|| '=x=',
+		_table_col_sep	=> $args{table_col_sep}					|| '=x=',
 		_table_sep		=> $args{table_sep}						|| '#-#-#',
 		_db_end			=> $args{db_end}						|| '^\#\-\#\-\#',
 		_db_suf			=> $args{db_suf}						|| '.txt',
@@ -90,18 +90,18 @@ sub connect {
 
 	## get filename from file= or db= arg
     $obj->{_file} = ($args{file} || $args{db} || $obj->{_file})
-        or do { $self->{_err}->("$0: No filename."); return; };
+        or do { $self->errAdd("$0: No filename."); return; };
 
 	$obj->{_file} =~ /^([_\w.\/\\: -]+)$/
 		and $obj->{_file} = $1
-			or do { $self->{_err}->(qq/$0: Connect failed on $obj->{_file}: Filename.\n/), return};
+			or do { $self->errAdd(qq/$0: Connect failed on $obj->{_file}: Filename.\n/), return};
 
 	-e $obj->{_file}
-		or do { $self->{_err}->(qq/$0: Connect failed on $obj->{_file}: File doesn't exist.\n/), return};
+		or do { $self->errAdd(qq/$0: Connect failed on $obj->{_file}: File doesn't exist.\n/), return};
 
 	$obj->{_fsize} = -s $obj->{_file};
 	$obj->{_fsize} > 0
-		or do { $self->{_err}->(qq/$0: Connect failed on $obj->{_file}: File is empty.\n/), return};
+		or do { $self->errAdd(qq/$0: Connect failed on $obj->{_file}: File is empty.\n/), return};
 
 	$obj->{_fsize_note}	= reverse int $obj->{_fsize}/1024;
 	$obj->{_fsize_note}	=~ s/(\d\d\d)(?=\d)(?!\d*\.)/$1,/g;
@@ -118,7 +118,7 @@ sub connect {
 	$obj->{_record_out_sep} = (exists $args{record_out_sep}	?  $args{record_out_sep} 	: $obj->{_record_out_sep});
 	$obj->{_record_out_sep}	||= $obj->{_record_sep};
 	$obj->{_idx_sep}		= (exists $args{idx_sep}		?  $args{idx_sep}    		: $obj->{_idx_sep});
-	$obj->{_table_col_sep}	= $args{_table_col_sep}										|| $obj->{_table_col_sep};
+	$obj->{_table_col_sep}	= $args{table_col_sep}										|| $obj->{_table_col_sep};
 	$obj->{_table_sep}		= $args{table_sep}											|| $obj->{_table_sep};
 
 	## Line Filtering
@@ -147,7 +147,7 @@ sub connect {
 
 		## Open the database file
 		open (DB_IN, "<", "$lock->{FILE}")
-			or do { $self->{_err}->(qq/log: $0: Connect failed on $lock->{FILE}: \n$!\n/), return};
+			or do { $self->errLog(qq/$0: Connect failed on $lock->{FILE}: \n$!\n/), return};
 
 		## Grab the first [head_max] + 1 # of lines
 
@@ -162,7 +162,7 @@ sub connect {
 
 		## Close database file.
 		close DB_IN
-			or do { $self->{_err}->(qq/log: $0: Connect failed on closing $lock->{FILE}: \n$!\n/), return};
+			or do { $self->errLog(qq/$0: Connect failed on closing $lock->{FILE}: \n$!\n/), return};
 	}
 
 	## Now get the good header lines
@@ -213,9 +213,7 @@ sub connect {
 		close DB_IN;
 	}
 
-# 	$self->{_msg}->("log: Connect: $lock->{FILE} ");
 	$self->msgLog("Connect: $lock->{FILE} ");
-
 
 	## THEN release the lock
 	$lock->{RELEASE}->();
@@ -245,7 +243,7 @@ sub connect {
 		my $fld = $head[$col];
 
 		## Labels (field names)
-		$struct{labels}->[$col] = $args{labels}->[$col] || $struct{labels}->[$col] 
+		$struct{labels}->[$col] = $args{labels}->[$col] || $struct{labels}->[$col]
 			|| join ' ' => map { ucfirst } split /[ _]+/ => lc $fld;
 
 		## Formats (field type & size)
@@ -294,7 +292,7 @@ sub connect {
 
 		## It's my default!
 		$struct{defaults}->[$col]	= $fld_default;
-		
+
 		next unless $fld eq $obj->{_table_col_sep};   # config default: =x=
 
 		$struct{types}->[$col]			= 's';
@@ -400,7 +398,7 @@ sub connect {
 sub save_connection {
 	my $self			= shift();
 	unless ($self->{_status}->{saveable}) {
-		$self->{_err}->("log: Save Connection failed: Not Saveable.") and return;
+		$self->errLog("Save Connection failed: Not Saveable.") and return;
 	}
 
 	my $location		= shift || $self->{FILE_DIR};
@@ -411,13 +409,13 @@ sub save_connection {
 
  	$connection{_indexes}	= $self->get_indexes();
 
-	my $save_time		= localtime();
+	my $save_time		= localtime;
 
  	use Data::Dumper;
 	$Data::Dumper::Purity	= 1;
  	$Data::Dumper::Sortkeys	= 1;
 	open my $dbx, ">", $conn_file
-		or $self->{_err}->("log: Save Connection failed on Open: $!") and return;
+		or $self->errLog("Save Connection failed on Open: $!") and return;
 
 	print $dbx <<"INIT";
 
@@ -441,7 +439,7 @@ CONN
 
 	chmod oct(777), $dbx;
 	close $dbx
-		or $self->{_err}->("log: Save Connection failed on Close: $!") and return;
+		or $self->errLog("Save Connection failed on Close: $!") and return;
 
 	$self->{_dbx}	= $conn_file;
 }
@@ -607,7 +605,7 @@ sub prepare {
 	# Prepending the PROC name with an alpha-only word and a colon registers that word
 	# as a selector variable that will be returned with the results() method;
 	# Example: $sth	= dbh->prepare(qq{SELECT * WHERE all PROC COUNTS:count_unique,city;});
-	# After sth->execute(), sth->results('COUNTS') has the values collected (assuming 
+	# After sth->execute(), sth->results('COUNTS') has the values collected (assuming
 	# count_unique cooperates by putting its return values into $self->{COUNTS}).
 	# In this example, COUNTS: is actually unnecessary, because COUNTS is tracked by default,
 	# in @BVA::KALE::DATA::PROC::tracks; currently these are tracked:
@@ -662,7 +660,7 @@ sub cursor {
 		return $self->iterator($arg);
 	}
 
-	$self->{_err}->("log: No cursor available from " . ($self->{ACTION} || 'unknown action') . "\n");
+	$self->errLog("No cursor available from " . ($self->{ACTION} || 'unknown action') . "\n");
 	return;
 }
 
@@ -674,7 +672,7 @@ sub iterator {
 		return $self->{iterator}->($arg);
 	}
 
-	$self->{_err}->("log: No iterator available from " . ($self->{ACTION} || 'unknown action') . "\n");
+	$self->errLog("No iterator available from " . ($self->{ACTION} || 'unknown action') . "\n");
 	return;
 }
 
@@ -686,13 +684,13 @@ sub has_iterator {
 
 sub results {
 	my $self	= shift;
-	
+
 	$self->{_results} = { map { exists $self->{$_} ? ($_ => $self->{$_}) : () } $self->result_tracking() };
-	
+
 	my $which_result	= shift || '';
-	
+
 	return $self->{_results} unless $which_result;
-	
+
 	unless (exists $self->{_results}->{$which_result}) {
 		$self->{_results}->{$which_result} = {};
 	}
@@ -701,7 +699,7 @@ sub results {
 
 sub result_tracking {
 	my $self	= shift;
-	
+
 	return @{ $self->{_tracking} };
 }
 
@@ -1169,12 +1167,12 @@ sub prep_index {
   	$statement{selector}	= $self->make_selector($statement{WHERE});
 
 	my $fld_str				= join( ' ' => @{ $statement{INDEX}->{flds}} ? @{ $statement{INDEX}->{flds}} : '' );
-	my $index_date			= BVA::KALE::DATA::CALC::exec_date_time(); # localtime();
+	my $index_date			= BVA::KALE::DATA::CALC::exec_date_time(); # localtime;
 	my $fileName			= $self->DB_FILE;
 	my $table_date			= BVA::KALE::DATETIME::tell_time('iso',(stat($fileName))[9]);
-	
+
 	my $wherePhrase			= $statement{selector}->{where};
-	
+
 	my $index_case	= '';
 	if ($statement{WITH}->{idx_upcase}) {
 		$statement{INDEX}->{case}	= $index_case	=  'upcase';
@@ -1186,7 +1184,7 @@ sub prep_index {
 		$statement{INDEX}->{case}	= '';
 		$index_case	= 'nativecase';
 	}
-	
+
 	$statement{INDEX}->{preamble} = <<"IDX";
 BVA::KALE::DATA->get_idx(\\\*DATA,{
   	TABLE		=> \"$fileName\",
@@ -1212,7 +1210,7 @@ sub prep_indexid {
 	my (@cols, @flds, $idxpat);
 
 	# INDEX
-	$statement{INDEX}		= { 
+	$statement{INDEX}		= {
 		cols	=> [],
 		flds	=> [],
 		id_fld	=> $self->id_fld,
@@ -1232,14 +1230,14 @@ sub prep_indexid {
   	$statement{selector}	= $self->make_selector('all');
 
 	my $fld_str				= '';
-	my $index_date			= BVA::KALE::DATA::CALC::exec_date_time(); # localtime();
+	my $index_date			= BVA::KALE::DATA::CALC::exec_date_time(); # localtime;
 	my $fileName			= $self->DB_FILE;
 	my $table_date			= BVA::KALE::DATETIME::tell_time('iso',(stat($fileName))[9]);
-	
+
 	my $wherePhrase			= $statement{selector}->{where};
-	
+
 	my $index_case	= 'nativecase';
-	
+
 	$statement{INDEX}->{preamble} = <<"IDX";
 BVA::KALE::DATA->get_idx(\\\*DATA,{
   	TABLE		=> \"$fileName\",
@@ -1255,7 +1253,7 @@ BVA::KALE::DATA->get_idx(\\\*DATA,{
 
 __DATA__
 IDX
-	
+
 	bless { %{ $self }, %statement }, ref($self) || $self
 }
 
@@ -1268,7 +1266,7 @@ sub prep_create {
 	my %statement = %{ $sttmt };
 	my ($out_file,@flds);
 
-	if ($statement{CREATE} =~ m/^\s*(file|dbh?)?\s*([,:=]?>?)?\s*(.*)$/) {
+	if ($statement{CREATE} =~ m/^\s*(file|dbh?|table)?\s*([,:=]?>?)?\s*(.*)$/) {
 		$statement{_create}->{type}	= $1 || 'db';
 		$statement{_create}->{attr}	= $3 || $self->{FILE};
 		($out_file,@flds)			= split /\s*,\s*/ => $statement{_create}->{attr};
@@ -1294,9 +1292,9 @@ sub prep_create {
 	@flds							= map { $_ eq '*' ? $self->fields() : $_ } @flds;
 	for my $i (0..$#flds) {
 		next if $flds[$i] =~ /^\#/;
-		my $col	= ( $flds[$i] =~ /^\*(.*)$/ ? $self->column($1) : $self->column($flds[$i]) );	
+		my $col	= ( $flds[$i] =~ /^\*(.*)$/ ? $self->column($1) : $self->column($flds[$i]) );
 		if ($col) {
-			unless ($statement{WITH}->{ignore_keys}) {		
+			unless ($statement{WITH}->{ignore_keys}) {
 				if ($self->{_struct}[4]->[$col+1] && $self->{_struct}[4]->[$col+1] == 1) {
 					$flds[$i] = "#$flds[$i]";
 				}
@@ -1310,7 +1308,7 @@ sub prep_create {
 	}
 
 	$statement{_create}->{flds}		= [ @flds, '=x=' ];
-	
+
 	$statement{_create}->{id_col}	= (grep{ $flds[$_] =~ /^\#/ } ('0 but true',1..$#flds))[0]
 										|| $statement{WITH}->{id_col}
 											|| $self->{_id_fld} && (grep{ $flds[$_] eq $self->{_id_fld} } ('0 but true',1..$#flds))[0]
@@ -1354,22 +1352,22 @@ sub do_create {
 	my $lock	= $self->get_lock($self->{_create}->{file}) or return;
 
 	unless (sysopen(OUT, $lock->{FILE}, O_WRONLY | O_TRUNC | O_CREAT, oct(777))) {
-		$self->{_err}->("log: Can't create database file $self->{_create}->{file}: $@, \n$!\n");
+		$self->errLog("Can't create database file $self->{_create}->{file}: $@, \n$!\n");
 		return
 	}
 
-# 	$self->{_msg}->("log: New database fields:\n" . join( '|' => @{ $self->{_create}->{flds} }) );
 	$self->msgLog("New database fields:\n" . join( '|' => @{ $self->{_create}->{flds} }) );
 
 	if ($args{use_formats}) {
 # 		print OUT $self->db_struct(@{ $self->{_create}->{flds} }), $self->{_record_sep}, $self->{_record_sep};
-		print OUT $self->db_struct(@{ $self->{_create}->{flds} }), $self->{_record_out_sep}, $self->{_record_out_sep};
+# 		print OUT $self->db_struct(@{ $self->{_create}->{flds} }), $self->{_record_out_sep}, $self->{_record_out_sep};
+		print OUT $self->db_out_struct(@{ $self->{_create}->{flds} }), $self->{_record_out_sep}, $self->{_record_out_sep};
 	} else {
 #  		print OUT $self->db_mod_struct(@{ $self->{_create}->{flds} }), $self->{_record_sep}, $self->{_record_sep};
- 		print OUT $self->db_mod_struct(@{ $self->{_create}->{flds} }), $self->{_record_out_sep}, $self->{_record_out_sep};
+#  		print OUT $self->db_mod_struct(@{ $self->{_create}->{flds} }), $self->{_record_out_sep}, $self->{_record_out_sep};
+ 		print OUT $self->db_out_struct(@{ $self->{_create}->{flds} }), $self->{_record_out_sep}, $self->{_record_out_sep};
 	}
 
-# 	$self->{_msg}->("log: OK New database file created $self->{_create}->{file}");
 	$self->msgLog("OK New database file created $self->{_create}->{file}");
 
 	close OUT;
@@ -1379,9 +1377,15 @@ sub do_create {
 		$last_lock->{RELEASE}->() or return;
 	}
 
+	my $col_sep	= $args{col_sep} ?  $args{col_sep} :  $self->{_output_sep};
+
 	if ($self->{_create}->{type} eq 'dbh') {
-		return BVA::KALE::DATA->init(input_sep => $self->{_input_sep},output_sep => $self->{_output_sep},record_sep => $self->{_record_out_sep})->connect(db => $lock->{FILE});
-	} else {
+ 		return BVA::KALE::DATA->init(input_sep => $col_sep,output_sep => $self->{_output_sep},record_sep => $self->{_record_out_sep})->connect(db => $lock->{FILE});
+#		return BVA::KALE::DATA->init(input_sep => $self->{_output_sep},output_sep => $self->{_output_sep},record_sep => $self->{_record_out_sep})->connect(db => $lock->{FILE});
+	} elsif ($self->{_create}->{type} eq 'table') {
+# 		return BVA::KALE::DATA->init(input_sep => $self->{_input_sep},output_sep => $self->{_output_sep},record_sep => $self->{_record_out_sep})->connect(db => $lock->{FILE});
+		return BVA::KALE::DATA->init(input_sep => $self->{_output_sep},output_sep => $self->{_output_sep},record_sep => $self->{_record_out_sep})->connect(db => $lock->{FILE});
+	}  else {
 		return $lock->{FILE};
 	}
 }
@@ -1392,7 +1396,7 @@ sub do_update {
 	my %args			= %{ $self->{WITH} };
 
 	my @flds			= @{ $self->{_head} };
-	
+
 	my %exec_params;
 
 	if (ref($_[0]) eq 'HASH') {
@@ -1414,7 +1418,6 @@ sub do_update {
 	my $selector		= $self->{selector}->{test};
 
 	if ($args{insert_mute}) {
-# 		$self->{_msg}->("mute: Insertion");
 		$self->msgMute("Insertion");
 	}
 
@@ -1485,7 +1488,6 @@ sub do_update {
 
 	}
 
-# 	$self->{_msg}->("log: " . join( ' ' =>
 	$self->msgLog("" . join( ' ' =>
 			qq/Update: $self->{selector}->{count} record/ . ($self->{selector}->{count} == 1 ? '' : 's') . qq/ updated/,
 			qq/out of $self->{selector}->{tried} tr/ . ($self->{selector}->{tried} == 1 ? 'y' : 'ies'),
@@ -1504,7 +1506,6 @@ sub do_insert {
 	my @flds			= @{ $self->{_head} };
 
 	if ($args{insert_mute}) {
-# 		$self->{_msg}->("mute: Insertion");
 		$self->msgMute("Insertion");
 	}
 
@@ -1571,7 +1572,7 @@ sub do_insert {
 			}
 			close DB;
 			if ($self->{selector}->{count}) {
-				$self->{_err}->("Proposed ID $new_id is not unique for insertion into this table.\n$!\n");
+				$self->errAdd("Proposed ID $new_id is not unique for insertion into this table.\n$!\n");
 				$self->{CURRENT}{RELEASE}->();
 				return
 			}
@@ -1623,7 +1624,8 @@ sub do_insert {
 		local *LOCK	= $self->{CURRENT}{LOCK_FH};
 
 		## Print the new data record at the end of the data file
-		local $" = $self->{_input_sep};
+# 		local $" = $self->{_input_sep};
+		local $" = $self->{_output_sep};
 		print DB "@record", $self->{_record_sep};	## ** 2006-01-01
 
 		## Close the data file
@@ -1635,20 +1637,18 @@ sub do_insert {
 		truncate LOCK, tell LOCK;
 
 	} else {
-		$self->{_err}->("log: Can't access $self->{CURRENT}{FILE} for Insert: \n$!\n");
+		$self->errLog("Can't access $self->{CURRENT}{FILE} for Insert: \n$!\n");
 		$self->{CURRENT}{RELEASE}->();
 		return
 	}
 
-# 	$self->{_msg}->("log: Insert: Record Inserted with ID $new_id");
 	$self->msgLog("Insert: Record Inserted with ID $new_id");
 
 	# Now release the lock
 	$self->{CURRENT}{RELEASE}->();
 
-#  	$self->{_msg}->("unmute");
  	$self->msgUnmute();
- 
+
 	return $new_id;
 }
 
@@ -1657,7 +1657,6 @@ sub do_import {
 	my %args			= %{ $self->{WITH} };
 
 	if ($args{insert_mute}) {
-# 		$self->{_msg}->("mute: Insertion");
 		$self->msgMute("Insertion");
 	}
 
@@ -1704,7 +1703,7 @@ sub do_import {
 		if (open $DB, ">>", "$self->{CURRENT}{FILE}") {
 			local *LOCK	= $self->{CURRENT}{LOCK_FH};
 		} else {
-			$self->{_err}->("log: Can't access $self->{CURRENT}{FILE} for Import: \n$!\n");
+			$self->errLog("Can't access $self->{CURRENT}{FILE} for Import: \n$!\n");
 			$self->{CURRENT}{RELEASE}->();
 			return
 		}
@@ -1775,10 +1774,8 @@ sub do_import {
 	# Now release the lock
 	$self->{CURRENT}{RELEASE}->();
 
-# 	$self->{_msg}->("log: Records Imported: $self->{_import}{COUNT}");
 	$self->msgLog("Records Imported: $self->{_import}{COUNT}");
 
-# 	$self->{_msg}->("unmute");
  	$self->msgUnmute();
 
 	return BVA::KALE::DATA->init(input_sep => $self->{_input_sep})->connect(db => $self->{CURRENT}{FILE});
@@ -1816,7 +1813,6 @@ sub do_delete {
 		}
 	}
 
-# 	$self->{_msg}->("log: " . join( ' ' =>
 	$self->msgLog("" . join( ' ' =>
 			qq/Delete: $self->{selector}->{count} record/ . ($self->{selector}->{count} == 1 ? '' : 's') . qq/ deleted/,
 			qq/out of $self->{selector}->{tried} tr/ . ($self->{selector}->{tried} == 1 ? 'y' : 'ies'),
@@ -1837,12 +1833,12 @@ sub do_count {
 	for my $src (@{ $self->{_from} }) {
   		open my $in, "<", $src or next;
   		$self->{CURRENT}{FH}	= $in; # {CURRENT}{FH} can be used by procs
-		$self->{CURRENT}{LINE_START_BYTE}	= tell $in || $self->{_line0_byte}; 
+		$self->{CURRENT}{LINE_START_BYTE}	= tell $in || $self->{_line0_byte};
 		local $/	= $self->{_record_sep};
 
 		COUNT: while (my $LINE = <$in>) {
 			last COUNT if $LINE =~ /^\Q$self->{_table_sep}\E/;
-			unless ( 
+			unless (
 				$. > $self->{_line0}
 					and
 				$LINE !~ /$self->{_line_skip}/
@@ -1859,7 +1855,6 @@ sub do_count {
 		close $in;
 	}
 
-# 	$self->{_msg}->("log: " . join( ' ' =>
 	$self->msgLog("" . join( ' ' =>
 			qq/Count: $self->{selector}->{count} record/ . ($self->{selector}->{count} == 1 ? '' : 's') . qq/ found/,
 			qq/out of $self->{selector}->{tried} tr/ . ($self->{selector}->{tried} == 1 ? 'y' : 'ies'),
@@ -1872,7 +1867,7 @@ sub do_count {
 sub do_browse {
 	my $self					= shift;
 	my @flds					= @{ $self->{_head} };
-	
+
 	my $selector				= $self->{selector}->{test};
 	$self->{MARK}				||= 0; # $self->{_line0_byte};
 	my @index					= ();
@@ -1899,7 +1894,7 @@ sub do_browse {
 				last HDR if $. >= $self->{_line0};
 			}
 		}
-		
+
 		$self->{CURRENT}{LINE_START_BYTE}	= tell IN;
 
 		LINE: while ($self->{CURRENT}{LINE} = <IN>) {
@@ -1910,7 +1905,7 @@ sub do_browse {
 				$self->{CURRENT}{LINE_START_BYTE}	= tell IN;
 				next LINE;
 			}
-			
+
 			for my $break ( @{ $self->{BREAK} } ) {
 				if ($self->$break($self->{CURRENT}{LINE})) {
 					$self->{break_table}++;
@@ -1922,9 +1917,9 @@ sub do_browse {
 				$self->{CURRENT}{LINE_START_BYTE}	= tell IN;
 				next LINE;
 			}
-			
+
 			push @{ $self->{BYTES}->{start_bytes} } => $self->{CURRENT}{LINE_START_BYTE};
-			
+
 			# parse this record's data into expected fields; providing fld count + 1 assures all flds are defined
 			@{ $self->{CURRENT}{ROW} }{@flds}	= split /(?:$self->{_input_sep}|$self->{_record_sep})/ => $self->{CURRENT}{LINE}, @flds + 1;
 
@@ -1947,7 +1942,7 @@ sub do_browse {
 				$self->{CURRENT}{RELEASE}->();
 				last BROWSE;
 			}
-			
+
 			$self->{CURRENT}{LINE_START_BYTE}	= tell $self->{CURRENT}{FH};
 		}
 
@@ -1959,12 +1954,12 @@ sub do_browse {
 	}
 
 	my $where_msg				= qq/$self->{selector}->{count} record/ . ($self->{selector}->{count} == 1 ? '' : 's') . qq/ browsed/;
-	$self->{BROWSE}->{msg}		= join( ' ' => 
+	$self->{BROWSE}->{msg}		= join( ' ' =>
 									$where_msg,
 									qq/WHERE: $self->{selector}->{phrase}/
 								);
 	$self->msgLog($where_msg);
-	
+
 	my $rpt_msg	= join( ' ' =>
 		$where_msg,
 		qq/out of $self->{selector}->{tried} tr/ . ($self->{selector}->{tried} == 1 ? 'y' : 'ies'),
@@ -1980,9 +1975,9 @@ sub do_browse {
 # INDEX
 sub do_index {
 	my $self						= shift;
-	my %args						= %{ $self->{WITH} };	
+	my %args						= %{ $self->{WITH} };
 	my @flds						= @{ $self->{_head} };
-	
+
 	my $selector					= $self->{selector}->{test};
 	$self->{MARK}					||= 0; # $self->{_line0_byte};
 
@@ -1999,7 +1994,7 @@ sub do_index {
 		my $idx_fh;
 		open $idx_fh, ">", $self->{NEW}{FILE}
 			and push @index_files => $self->{CURRENT}{_table_idx}
-				or do {$self->{_err}->("log: Index can't access index $self->{CURRENT}{_table_idx}: $@, \n$!\n"); return};
+				or do {$self->errLog("Index can't access index $self->{CURRENT}{_table_idx}: $@, \n$!\n"); return};
 
 		$self->{NEW}{FH}		= $idx_fh;
 
@@ -2020,7 +2015,7 @@ sub do_index {
 		}
 
 		$self->{CURRENT}{LINE_START_BYTE}	= tell $self->{CURRENT}{FH};
-		
+
 		LINE: while ($self->{CURRENT}{LINE} = readline($self->{CURRENT}{FH})) {
 
 			last LINE if $self->{CURRENT}{LINE} =~ /^\Q$self->{_table_sep}\E/;
@@ -2050,7 +2045,10 @@ sub do_index {
 			# Sanify field values with nulls, protecting zero values
 			# Trim leading and trailing whitespace
 			for my $fld (@flds) {
- 				if ( !$self->{CURRENT}{ROW}->{$fld} &! ~$self->{CURRENT}{ROW}->{$fld} ) {
+#  				if ( !$self->{CURRENT}{ROW}->{$fld} &! ~$self->{CURRENT}{ROW}->{$fld} ) {
+#  					$self->{CURRENT}{ROW}->{$fld} = $self->{_nulls}->{$fld};
+# 				}
+ 				unless ( $self->{CURRENT}{ROW}->{$fld} || length($self->{CURRENT}{ROW}->{$fld}) ) {
  					$self->{CURRENT}{ROW}->{$fld} = $self->{_nulls}->{$fld};
 				}
 				$self->{CURRENT}{ROW}->{$fld} =~ s/^\s*|\s*$//gs;
@@ -2095,11 +2093,10 @@ sub do_index {
 			qq/Index: $self->{selector}->{count} record/ . ($self->{selector}->{count} == 1 ? '' : 's') . qq/ indexed/,
 			qq/WHERE: $self->{selector}->{phrase}/);
 
-# 	$self->{_msg}->("log: $self->{INDEX}->{msg}");
 	$self->msgLog("$self->{INDEX}->{msg}");
 
 	$self->{INDEX}->{index_files}	= \@index_files;
-	
+
 	$self->get_indexes();
 
 	return bless $self, ref($self) || $self;
@@ -2109,7 +2106,7 @@ sub do_index {
 sub do_indexid {
 	my $self						= shift;
 	my @flds						= @{ $self->{_head} };
-	
+
 	my $selector					= $self->{selector}->{test};
 	$self->{MARK}					= $self->{_line0_byte};
 
@@ -2125,7 +2122,7 @@ sub do_indexid {
 		my $idx_fh;
 		open $idx_fh, ">", $self->{NEW}{FILE}
 			and push @index_files => $self->{CURRENT}{_table_idx}
-				or do {$self->{_err}->("log: Index can't access index $self->{CURRENT}{_table_idx}: $@, \n$!\n"); return};
+				or do {$self->errLog("Index can't access index $self->{CURRENT}{_table_idx}: $@, \n$!\n"); return};
 
 		$self->{NEW}{FH}		= $idx_fh;
 
@@ -2140,7 +2137,7 @@ sub do_indexid {
 		seek $self->{CURRENT}{FH}, $self->{MARK}, 0;
 
 		$self->{CURRENT}{LINE_START_BYTE}	= tell $self->{CURRENT}{FH};
-		
+
 		LINE: while ($self->{CURRENT}{LINE} = readline($self->{CURRENT}{FH})) {
 
 			last LINE if $self->{CURRENT}{LINE} =~ /^\Q$self->{_table_sep}\E/;
@@ -2160,7 +2157,7 @@ sub do_indexid {
 			# parse this record's data into expected fields and select the id column
 			$self->{CURRENT}{ROW}->{_id}	= (split $self->{_input_sep} => $self->{CURRENT}{LINE}, @flds + 1)[ $self->{INDEX}->{id_col} ];
 			$self->{CURRENT}{ROW}->{_id}	=~ s/^\s*|\s*$//gs;
-			
+
 			# create an index entry, with id field value, running count, and byte number
 	  		$self->{CURRENT}{ENTRY}	= pack $self->{INDEX}->{idxpat},
 				$self->{CURRENT}{ROW}->{_id},
@@ -2197,11 +2194,10 @@ sub do_indexid {
 			qq/Index: $self->{selector}->{count} record/ . ($self->{selector}->{count} == 1 ? '' : 's') . qq/ indexed/,
 			qq/WHERE: $self->{selector}->{phrase}/);
 
-# 	$self->{_msg}->("log: $self->{INDEX}->{msg}");
 	$self->msgLog("$self->{INDEX}->{msg}");
 
 	$self->{INDEX}->{index_files}	= \@index_files;
-	
+
 	$self->get_indexes();
 
 	return bless $self, ref($self) || $self;
@@ -2238,8 +2234,8 @@ sub do_select {
 
 	# BYTE MARKS - used mostly with byte marks obtained from an index
 	$self->{BYTE_MARKS}		= $args{MARKS} ? $args{MARKS} : $args{MARK} ? [$args{MARK}] : [];
-	if (@{ $self->{BYTE_MARKS} } > 0) { 
-		$self->{MARKED_ONLY}++; 
+	if (@{ $self->{BYTE_MARKS} } > 0) {
+		$self->{MARKED_ONLY}++;
 		$self->{MARK}			= shift @{ $self->{BYTE_MARKS} };
 	} else {
  		$self->{MARK}			= $self->{_line0_byte};
@@ -2277,7 +2273,7 @@ sub do_select {
 				}
 			}
 
-			$self->{CURRENT}{LINE_START_BYTE}	= tell $self->{CURRENT}{FH} || $self->{_line0_byte}; 
+			$self->{CURRENT}{LINE_START_BYTE}	= tell $self->{CURRENT}{FH} || $self->{_line0_byte};
 
 			LINE: while ($self->{CURRENT}{LINE} = <IN>) {
 
@@ -2356,7 +2352,7 @@ sub do_select {
 				} else {
 					last LINE if $self->{MARKED_ONLY};
 				}
-				
+
 				$self->{CURRENT}{LINE_START_BYTE}	= tell $self->{CURRENT}{FH};
 			}
 
@@ -2711,7 +2707,7 @@ sub fetchrow_record {
 	return $self->iterator('row') unless @_;
 
 	my $d		= $self->iterator('hashref');
-	
+
 	return unless $d;
 
 	my @flds	= grep { $self->columns($_) } @_;
@@ -3076,12 +3072,12 @@ sub check_lock {
 	$lock{_TRYFILE} ||= $self->{_file} || '';
 
 	unless ($lock{_TRYFILE}) {
-		$self->{_err}->("log: No database specified for locking: $@, \n");
+		$self->errLog("No database specified for locking: $@, \n");
 		return
 	}
 
 	unless ($lock{_TRYFILE} =~ m/^([_\w.\/\\: -]+)$/) {
-		$self->{_err}->("log: $0: Bad characters in filename.\n");
+		$self->errLog("$0: Bad characters in filename.\n");
 		return
 	}
 	$lock{FILE}	= $1;
@@ -3089,21 +3085,21 @@ sub check_lock {
 	@lock{qw/FILE_DIR FILE_NAME FILE_SUF/}	= $lock{FILE} =~ /^(.*?\/)?([^\/]*?)(\.\w{1,4})?$/;
 
 	unless ("$lock{FILE}$self->{_sem_suf}" =~ m/^([_\w.\/\\: -]+)$/) {
-		$self->{_err}->("log: $0: Bad characters in semaphore filename.\n");
+		$self->errLog("$0: Bad characters in semaphore filename.\n");
 		return
 	}
 	$lock{ID_FILE}	= $1;
 
 	## Try to open the semaphore file
 	unless (sysopen(LOCK, $lock{ID_FILE}, O_RDWR | O_CREAT, oct(777))) {
-		$self->{_err}->("log: Can't open semaphore $lock{ID_FILE}: $@, \n$!\n");
+		$self->errLog("Can't open semaphore $lock{ID_FILE}: $@, \n$!\n");
 		return
 	}
 
 	## Try to lock the semaphore file
 	unless ($lock{LOCK_OK}		= eval { flock(LOCK, LOCK_EX) and 'OK' } || '') {
 		close LOCK;
-		$self->{_err}->("log: Can't lock semaphore $lock{ID_FILE}: $@, \n$!\n");
+		$self->errLog("Can't lock semaphore $lock{ID_FILE}: $@, \n$!\n");
 		return
 	}
 
@@ -3117,11 +3113,9 @@ sub check_lock {
 	$lock{RELEASE}	= sub {
 		close delete $lock{LOCK_FH}
 			and
-# 		$self->{_msg}->("log: OK Released lock on $lock{FILE}");
 		$self->msgLog("OK Released lock on $lock{FILE}");
 	};
 
-# 	$self->{_msg}->("log: OK Confirmed lock on $lock{FILE}");
 	$self->msgLog("OK Confirmed lock on $lock{FILE}");
 
 	\%lock;  # qw{ FILE FILE_DIR FILE_NAME FILE_SUF ID_FILE LOCK_FH LOCK_OK LAST_ID RELEASE }
@@ -3138,12 +3132,12 @@ sub get_lock {
 	$lock{_TRYFILE} ||= $self->{_file} || '';
 
 	unless ($lock{_TRYFILE}) {
-		$self->{_err}->("log: No database specified for locking: $@, \n");
+		$self->errLog("No database specified for locking: $@, \n");
 		return
 	}
 
 	unless ($lock{_TRYFILE} =~ m/^([_\w.\/\\: -]+)$/) {
-		$self->{_err}->("log: $0: Bad characters in filename.\n");
+		$self->errLog("$0: Bad characters in filename.\n");
 		return
 	}
 	$lock{FILE}	= $1;
@@ -3151,21 +3145,21 @@ sub get_lock {
 	@lock{qw/FILE_DIR FILE_NAME FILE_SUF/}	= $lock{FILE} =~ /^(.*?\/)?([^\/]*?)(\.\w{1,4})?$/;
 
 	unless ("$lock{FILE}$self->{_sem_suf}" =~ m/^([_\w.\/\\: -]+)$/) {
-		$self->{_err}->("log: $0: Bad characters in semaphore filename.\n");
+		$self->errLog("$0: Bad characters in semaphore filename.\n");
 		return
 	}
 	$lock{ID_FILE}	= $1;
 
 	## Try to open the semaphore file
 	unless (sysopen(LOCK, $lock{ID_FILE}, O_RDWR | O_CREAT, oct(777))) {
-		$self->{_err}->("log: Can't open semaphore $lock{ID_FILE}: $@, \n$!\n");
+		$self->errLog("Can't open semaphore $lock{ID_FILE}: $@, \n$!\n");
 		return
 	}
 
 	## Try to lock the semaphore file
 	unless ($lock{LOCK_OK}		= eval { flock(LOCK, LOCK_EX) and 'OK' } || '') {
 		close LOCK;
-		$self->{_err}->("log: Can't lock semaphore $lock{ID_FILE}: $@, \n$!\n");
+		$self->errLog("Can't lock semaphore $lock{ID_FILE}: $@, \n$!\n");
 		return
 	}
 
@@ -3180,7 +3174,7 @@ sub get_lock {
 	unless ($lock{LAST_ID}) {
 		unless (sysopen( DB, $lock{FILE}, O_RDWR | O_CREAT, oct(777))) {
 			close LOCK;
-			$self->{_err}->("log: Can't open database file $lock{FILE}: $@, \n$!\n");
+			$self->errLog("Can't open database file $lock{FILE}: $@, \n$!\n");
 			return
 		}
 
@@ -3213,26 +3207,23 @@ sub get_lock {
 		if ($lock{journal} =~ /new/i) {
 			if ($lock{LAST_ID} ne $lock{INIT_ID} ) {
 				close LOCK;
-				$self->{_err}->("log: Journal new declined at ID $lock{LAST_ID} for table $lock{FILE}");
+				$self->errLog("Journal new declined at ID $lock{LAST_ID} for table $lock{FILE}");
 				return
 			}
 		# Or the requested journal ID must be a string or pattern exactly matching the last ID
 		} elsif ($lock{LAST_ID} !~ /^$lock{journal}$/) {
 			close LOCK;
-			$self->{_err}->("log: Unexpected last ID $lock{LAST_ID} for table $lock{FILE}");
+			$self->errLog("Unexpected last ID $lock{LAST_ID} for table $lock{FILE}");
 			return
 		}
-# 		$self->{_msg}->("log: OK Journaling in synch from $lock{LAST_ID}");
 		$self->msgLog("OK Journaling in synch from $lock{LAST_ID}");
 	}
 
-# 	$self->{_msg}->("log: OK Obtained lock on $lock{FILE}");
 	$self->msgLog("OK Obtained lock on $lock{FILE}");
 
 	$lock{RELEASE}	= sub {
 		close delete $lock{LOCK_FH}
 			and
-# 		$self->{_msg}->("log: OK Released lock on $lock{FILE}");
 		$self->msgLog("OK Released lock on $lock{FILE}");
 	};
 
@@ -3408,7 +3399,7 @@ sub get_indexes {
 	my $self	= shift;
 
 	my $location		= shift || $self->{FILE_DIR};
-	
+
 	my @current_indexes	= glob "${location}$self->{FILE_NAME}_index*$self->{_idx_suf}";
 
  	my %indexes;
@@ -3444,7 +3435,7 @@ sub get_indexes {
 
 sub indexes {
 	my $self	= shift;
-	
+
 	return $self->{_indexes} || $self->get_indexes();
 }
 
@@ -3567,6 +3558,36 @@ sub col_format {
 	$self->{_col_pats}->{ $_[0] } || ''
 }
 
+sub input_sep {
+	my $self	= shift;
+	return $self->{_input_sep};
+}
+
+sub output_sep {
+	my $self	= shift;
+	return $self->{_output_sep};
+}
+
+sub record_sep {
+	my $self	= shift;
+	return $self->{_record_sep};
+}
+
+sub record_out_sep {
+	my $self	= shift;
+	return $self->{_record_out_sep};
+}
+
+sub table_sep {
+	my $self	= shift;
+	return $self->{_table_sep};
+}
+
+sub line_blank {
+	my $self	= shift;
+	return $self->{_line_blank};
+}
+
 sub db_struct {
 	my $self = shift;
 	my %hd_nums	= %{ $self->{_hd_nums} };
@@ -3677,6 +3698,73 @@ sub db_mod_struct {
 	} @{$self->{_struct}};
 }
 
+## Used in CREATE
+## Same as db_struct: returns the headers defining a db structure:
+## including field names, field types, formats, defaults
+## EXCEPT it uses the original db's output separators (column & record separators)
+sub db_out_struct {
+	my $self = shift;
+	my %hd_nums	= %{ $self->{_hd_nums} };
+	my @flds;
+
+	if (@_) {
+		for (@_) {
+			my ($fld,$fmt,$type,$size,$def,$col,$id_mark,@add);
+			$fld	= $_;
+			if ($fld eq '*') {
+				push @add => grep { !/=x=/ } @{ $self->{_head} };
+			} elsif ($fld =~ /^(\#?)\*(.+?)(?:\:([^:]+?))?(?:\:([^:]+?))?(?:\:(.*?))?$/) {
+				$id_mark	= $1 ? 1 : 0;
+				$fld		= $2;
+				$type		= $3 || $self->{_types}->{$fld} || $self->{_def_type};
+				$size		= $4 || $self->{_sizes}->{$fld} || $self->{_def_size};
+				$def		= $5 || (defined($5) && !$5 && ~$5 ? 0 : '');
+				$fmt		= "$type:$size";
+				$col		= $hd_nums{$fld}	= scalar keys %hd_nums;
+
+				$self->{_struct}[0]->[$col+1] = $fld;
+				$self->{_struct}[1]->[$col+1] = join(' ' => map { ucfirst($_) } split / |_/ => $fld);
+				$self->{_struct}[2]->[$col+1] = $fmt;
+				$self->{_struct}[3]->[$col+1] = $def;
+				$self->{_struct}[4]->[$col+1] = $id_mark;
+
+				push @add => $fld;
+			} elsif ($fld =~ /^(\#?)([^*].+?)(?:\:([^:]+?))?(?:\:([^:]+?))?(?:\:(.*?))?$/) {
+				$id_mark	= $1 ? 1 : 0;
+				$fld		= $2;
+				$type		= $3 || $self->{_types}->{$fld} || $self->{_def_type};
+				$size		= $4 || $self->{_sizes}->{$fld} || $self->{_def_size};
+				$def		= $5 || (defined($5) && !$5 && ~$5 ? 0 : '');
+				$fmt		= "$type:$size";
+				if (exists $hd_nums{$fld}) {
+					$col		= $hd_nums{$fld};
+					$self->{_struct}[4]->[$col+1] = $id_mark;
+					$self->{_struct}[2]->[$col+1] = $fmt ? $fmt : $self->{_struct}[2]->[$col+1];
+					$self->{_struct}[3]->[$col+1] = $def;
+					push @add => $fld;
+				} else {
+				}
+			} else {
+
+			}
+			push @flds => @add;
+		}
+	} else {
+		@flds	= $self->{_select} ?
+					@{ $self->{_select}->{flds} } :
+						@{ $self->{_head} }
+	}
+
+ 	my @cols = map { $hd_nums{$_} || () } @flds;
+#	my @cols = 0 .. $#flds;
+
+	join $self->{_record_out_sep} => map {
+		my @elements	= @{$_};
+		my $line_label	= shift @elements;
+		$line_label . ':' . join($self->{_output_sep} => @elements[@cols])
+	} @{$self->{_struct}};
+}
+
 sub db_thin_struct {
 	my $self	= shift;
 	my %hd_nums	= %{ $self->{_hd_nums} };
@@ -3741,12 +3829,12 @@ sub first_id {
 	my $first	= shift || '00000';
 
 	$self->{_file}
-		or do {$self->{_err}->("log: No database file specified for First ID: \n$!\n"); return};
+		or do {$self->errLog("No database file specified for First ID: \n$!\n"); return};
 
 	## Open the semaphore file and set the last ID
 	sysopen(ID, $self->{_id_file}, O_RDWR | O_CREAT, oct(777))
 		and ($self->{_lock_ok} and flock(ID, LOCK_EX) or 0)
-			or do {$self->{_err}->("_first_id can't access semaphore $self->{_id_file}: $@ \n$!\n"); return};
+			or do {$self->errAdd("_first_id can't access semaphore $self->{_id_file}: $@ \n$!\n"); return};
 
 	print ID $first, "\n";
 	truncate ID, tell ID;
@@ -3760,19 +3848,19 @@ sub last_id {
 
 	$self->{FILE}
 		or do {
-				$self->{_err}->("log: No database file specified for Last ID: \n$!\n");
+				$self->errLog("No database file specified for Last ID: \n$!\n");
 				return
 			};
 
 	unless ($self->{LAST_ID}) {
 		unless (sysopen(ID, $self->{ID_FILE}, O_RDWR | O_CREAT, oct(777))
 			and ($self->{LOCK_OK}	= eval { flock(LOCK, LOCK_EX) and 'OK' })) {
-				$self->{_err}->("log: _last_id can't access semaphore $self->{_id_file}: $@ \n$!\n");
+				$self->errLog("_last_id can't access semaphore $self->{_id_file}: $@ \n$!\n");
 				return
 		}
 		unless (open DB,  "<", $self->{FILE}) {
 			close LOCK;
-			$self->{_err}->("log: Can't open database file $self->{FILE}: $@, \n$!\n");
+			$self->errLog("Can't open database file $self->{FILE}: $@, \n$!\n");
 			return
 		}
 
@@ -3803,18 +3891,18 @@ sub max_id {
 
 	$self->{FILE}
 		or do {
-				$self->{_err}->("log: No database file specified for Last ID: \n$!\n");
+				$self->errLog("No database file specified for Last ID: \n$!\n");
 				return
 			};
 
 	unless (sysopen(ID, $self->{ID_FILE}, O_RDWR | O_CREAT, oct(777))
 		and ($self->{LOCK_OK}	= eval { flock(LOCK, LOCK_EX) and 'OK' })) {
-			$self->{_err}->("log: _last_id can't access semaphore $self->{_id_file}: $@ \n$!\n");
+			$self->errLog("_last_id can't access semaphore $self->{_id_file}: $@ \n$!\n");
 			return
 	}
 	unless (open DB, "<", $self->{FILE}) {
 		close LOCK;
-		$self->{_err}->("log: Can't open database file $self->{FILE}: $@, \n$!\n");
+		$self->errLog("Can't open database file $self->{FILE}: $@, \n$!\n");
 		return
 	}
 
@@ -3928,6 +4016,50 @@ sub msgInit {
 	return $self->{_msg}->($new);
 }
 
+## Error messaging
+
+sub errAdd {
+	my $self	= shift;
+	my $new		= shift || '';
+	return $self->{_err}->("add: $new");
+}
+
+sub errLog {
+	my $self	= shift;
+	my $new		= shift || '';
+	return $self->{_err}->("log: $new");
+}
+
+sub errSay {
+	my $self	= shift;
+	my $new		= shift || '';
+	return $self->{_err}->("print: $new");
+}
+
+sub errMute {
+	my $self	= shift;
+	my $new		= shift || '';
+	return $self->{_err}->("mute: $new");
+}
+
+sub errUnmute {
+	my $self	= shift;
+	my $new		= shift || '';
+	return $self->{_err}->("unmute: $new");
+}
+
+sub errNew {
+	my $self	= shift;
+	my $new		= shift || '';
+	return $self->{_err}->($new);
+}
+
+sub errInit {
+	my $self	= shift;
+	my $new		= shift || '';
+	$self->{_err} = make_db_err();
+	return $self->{_err}->($new);
+}
 
 
 
@@ -3940,7 +4072,7 @@ sub msgInit {
 ## $msg->("log: ...");  #outputs time-stamped msg
 sub make_db_msg {
 	my $default_msg		= shift || '';
-	my $init_time		= localtime();
+	my $init_time		= localtime;
 	$default_msg		=~ s/<time>/$init_time/ge;
 	my $msg_holder		= ' ';
 	my $mute_lock		= 0;
@@ -3948,7 +4080,7 @@ sub make_db_msg {
 	return sub {
 		my $in = shift;
 		my $print_flush		= shift || 0;
-		my $time = localtime();
+		my $time = localtime;
 		return $msg_holder unless $in;
 		my ($command, $add_msg) = split ': ',  $in, 2;
 		$add_msg and $add_msg =~ s/\<time\>/$time/ge;
@@ -3995,7 +4127,9 @@ sub make_counter ($;@) {
 	return sub {
 		my $flag	= shift() || '';
 		return $start if $flag eq 'first';
-		
+
+		return $count if $flag eq '#';
+
 		if ($flag eq 'last') {
 			my $last_marker	= $eol;
 			$last_marker	=~ s/\#/$count/g;
