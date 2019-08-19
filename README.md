@@ -13,7 +13,7 @@ XUI objects can provide outputs in std output, text files, Excel workbooks, html
 
 BVA::XUI has been in use only in private installations, in some Internet website back-ends and in some data analysis libraries.
 
-BVA::XUI has been in continuous develeopment beginning in 2001; the version on GitHub initially is 3.6_001, dated 2013-03-31. I will be committing several changes soon reflecting further development through 2013.
+BVA::XUI has been in continuous develeopment beginning in 2001; the version on GitHub initially is 3.6_001, dated 2013-03-31. I will be committing several changes soon reflecting further development through 2019.
 
 The KALE project seeks to bring XUI up to current standards for publication as open source. The work entails:
 - Bring the code base to current best practices;
