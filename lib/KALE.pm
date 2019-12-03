@@ -1,7 +1,7 @@
 package BVA::KALE;
 
 $BVA::KALE::VERSION      = "3.08.01";
-$BVA::KALE::VERSION_DATE = '2019-03-24';
+$BVA::KALE::VERSION_DATE = '2019-12-02';
 
 use strict;
 use warnings;
