@@ -1,6 +1,6 @@
 package BVA::KALE;
 
-$BVA::KALE::VERSION      = "3.08.01";
+$BVA::KALE::VERSION      = "3.08.02b"; # No-vars
 $BVA::KALE::VERSION_DATE = '2019-12-02';
 
 use strict;
