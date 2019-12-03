@@ -37,7 +37,7 @@ sub dated {
 	my $col		= $_[2];
 
 	# Derive standard local date values/indices
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
 
 	$year			+= 1900;
 	my $mil_hour	= $hour;
@@ -57,7 +57,7 @@ sub exec_date {
 	my $rec		= $_[1];
 
 	# Derive standard local date values/indices
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
 
 	$year			+= 1900;
 	my $mil_hour	= $hour;
@@ -78,7 +78,7 @@ sub exec_date_time {
 	my $rec		= $_[1];
 
 	# Derive standard local date values/indices
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
 
 	$year			+= 1900;
 	my $mil_hour	= $hour;
@@ -97,7 +97,7 @@ sub exec_time {
 	my $self	= $_[0];
 
 	# Derive standard local date values/indices
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
 
 	$year			+= 1900;
 	my $mil_hour	= $hour;

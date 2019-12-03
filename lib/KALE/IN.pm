@@ -200,18 +200,23 @@ sub VALIDATE {
  
 sub get_marked_input ($;@) {
 	my $obj		= shift();
-	local *KEY		= $obj->invert(); # *{ $obj };
+	local *KEY	= $obj->invert(); # *{ $obj };
 
 	my $mark	= shift || $KEY{_mark};
 	return {} unless $mark;
 	my $testsub	= shift || sub {length $_[0]};
-
-	$KEY{$mark}	= { map {
-			((/^(.+)_$mark$/ or /^${mark}[:_](.+)$/) and $testsub->($1) ) ?
-			($1 => $KEY{_input}->{$_}) :
-			()
-		} keys %{ $KEY{_input} }
-	};
+	
+	for my $k (keys %{ $KEY{_input} } ) {
+		my $fld	= '';
+		if ($k =~ /^(.+)_${mark}$/) {
+			$fld	= $1;
+		} elsif ($k =~ /^${mark}[:_](.+)$/) {
+			$fld	= $1;
+		}
+		if ($testsub->($fld)) {
+			$KEY{$mark}->{$fld}	= $KEY{_input}->{$k};
+		}
+	}
 	
 	$obj->charge_meta(_vals => $KEY{$mark});
 	return $KEY{$mark}
@@ -289,7 +294,7 @@ sub get_required_marked_input ($;@) {
 	# Now, let's see what we got:
 	my (@supplied, @missing);
 	for (@required) {
-		if ($KEY{_input}->{"$mark:$_"}
+		if ($KEY{_input}->{"${mark}_$_"}
 				or $KEY{_input}->{"${mark}_$_"}
 					or $KEY{_input}->{"${_}_$mark"}
 						or '' )
@@ -722,7 +727,8 @@ sub _input_htm {
 			} $val, @vals); # *sort <-- make this an option
 		}		
 
-		$val	= ($val ? $val : (!$val && ~$val) ? '0' : '' );
+# 		$val	= ($val ? $val : (!$val && ~$val) ? '0' : '' );
+		$val	= ($val ? $val : (!$val & ~$val) == 1 ? '0' : '' );
 		
 		$name => $val
 	} @params };
@@ -765,7 +771,8 @@ sub _input_xhr {
 			} $val, @vals); # *sort <-- make this an option
 		}
 
-		$val	= ($val ? $val : (!$val && ~$val) ? '0' : '' );
+# 		$val	= ($val ? $val : (!$val && ~$val) ? '0' : '' );
+		$val	= ($val ? $val : (!$val & ~$val) == 1 ? '0' : '' );
 		
 		$name => $val
 	} @params };
@@ -799,7 +806,8 @@ sub _input_psgi {
 			} $val, @vals); # *sort <-- make this an option
 		}
 
-		$val	= ($val ? $val : (!$val && ~$val) ? '0' : '' );
+# 		$val	= ($val ? $val : (!$val && ~$val) ? '0' : '' );
+		$val	= ($val ? $val : (!$val & ~$val) == 1 ? '0' : '' );
 		
 		$name => $val
 	} keys %$params };

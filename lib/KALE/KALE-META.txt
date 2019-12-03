@@ -1,0 +1,83 @@
+KALE2
+
+my $meta	= BVA::KALE::META->new;
+
+meta-data object
+	with defaults
+	configurable
+
+attributes
+	source (config, db handler, ...)
+	
+properties (meta-data for fields)
+	field name
+	field label
+	database type
+	database size (column size)
+	default value(s)
+	display format
+	input type (e.g. for html: text, password, radio, checkbox, etc)
+	input size (might vary by type; use x:y ?)
+	pack format
+	sort format
+	
+	
+methods
+	my $fld	= 'first_name';
+
+	my $meta	= BVA::KALE::META->new;
+	
+	my $meta	= BVA::KALE::META->new(\%config);
+	
+	my $meta	= BVA::KALE::META->new( {
+		first_name	=> {
+			input_type 	=> 'text',
+			input_size	=> '16',
+			database_type	=> 'VARCHAR',
+			label		=> 'First Name',
+		},
+		last_name	=> {
+			input_type 	=> 'text',
+			input_size	=> '28',
+			database_type	=> 'VARCHAR',
+			label		=> 'Last Name',
+		},
+		...
+	} );
+	
+	
+
+
+
+	$fld . '_label'	= $meta->label_for($fld);
+	
+	set_input_type($fld, 'radio');
+	set_default($fld, 'large-medium-small');
+	
+	## ALTERNATIVE:
+	
+	my $first_name	= BVA::KALE::META->new('first_name');
+	my $label		= $first_name->label;
+	
+	$first_name->set_input_type('text');
+
+fields	
+labels
+label_for
+set_label
+display_format_for
+set_display_format
+input_size_for
+set_input_size
+input_type_for
+set_input_type
+database_type_for
+set_database_type
+database_size_for
+set_database_size
+pack_format_for
+set_pack_format
+sort_format_for
+set_sort_format
+default_for
+set_default
