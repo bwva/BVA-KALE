@@ -4,7 +4,7 @@ package BVA::KALE::DATA::PROC;
 ## Used in SELECT, BROWSE, INDEX, COUNT to collect, summarize, & count data with NO change to db record
 ## Used in UPDATE to modify db record as it is updated
 
-@BVA::KALE::DATA::PROC::tracks	= qw/COUNTS DUPES UNIQUE SUMS RECORDS TOTALS BYTES REDUCE/;
+@BVA::KALE::DATA::PROC::tracks	= qw/COUNTS DUPES UNIQUE SUMS RECORDS TOTALS BYTES REDUCE IF DATES/;
 
 sub printout {
 	my $self	= $_[0];
@@ -46,6 +46,14 @@ sub trunc_right {
 	for my $K (@flds) {
 		my $w	= $width || $self->size($K);
 		$_[0]->{CURRENT}{ROW}->{$K} =~ s/^(.{$w}).*$/$1/e;
+	}
+}
+
+sub trunc_dt_to_date {
+	my $self	= $_[0];
+	my @flds	= @_ > 2 ? @_[2..$#_] : @{ $self->{_head} };
+	for my $K (@flds) {
+		$_[0]->{CURRENT}{ROW}->{$K} =~ s/^(\d\d\d\d-\d\d-\d\d).*$/$1/e;
 	}
 }
 
@@ -174,6 +182,14 @@ sub count_unique {
 	my @flds		= @_ > 1 ? grep( { $self->{_hd_nums}->{$_} } @_[1..$#_] ) : @{ $self->{_head} };
 	for my $fld (@flds) {
 		$_[0]->{COUNTS}->{$fld}->{ $self->{CURRENT}{ROW}->{$fld} }++
+	}
+}
+
+sub count_unique_by_date {
+	my $self		= $_[0];
+	my @flds		= @_ > 1 ? grep( { $self->{_hd_nums}->{$_} } @_[1..$#_] ) : @{ $self->{_head} };
+	for my $fld (@flds) {
+		$_[0]->{DATES}->{$fld}->{ $self->{CURRENT}{ROW}->{$fld} }++
 	}
 }
 
@@ -462,6 +478,13 @@ sub gather_unique_records {
 	$_[0]->{RECORDS}->{$unique}->{ $self->{CURRENT}{ROW}->{$unique} } = $self->{CURRENT}{ROW};
 }
 
+sub collect_unique_records {
+	my $self			= $_[0];
+	my $unique			= $_[1];
+	my @flds			= @_ > 2 ? @_[2..$#_] : @{ $self->{_head} };
+	push @{ $_[0]->{RECORDS}->{$unique}->{ $self->{CURRENT}{ROW}->{$unique} } } => [ @{ $self->{CURRENT}{ROW} }{@flds} ];
+}
+
 sub catflds {
 	my $self	= $_[0];
 	my @flds	= @_ > 1 ? @_[1..$#_] : @{ $self->{_head} };
@@ -640,7 +663,7 @@ sub set_date {
 	my @flds	= @_ > 1 ? @_[1..$#_] : grep { $self->{_types}{$_} eq 'd' } @{ $self->{_head} };
 
 	# Derive standard local date values/indices
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
 
 	$year			+= 1900;
 	my $mil_hour	= $hour;

@@ -5,6 +5,8 @@ $BVA::KALE::DATA::VERSION	= '4.04_001';	# 2018-04-01 bva@cruzio.com
 use strict;
 use warnings;
 
+use utf8;
+
 use Fcntl qw{:DEFAULT :flock};
 
 use parent qw{BVA::KALE::DATA::WHERE BVA::KALE::DATA::META BVA::KALE::DATA::PROC BVA::KALE::DATA::CALC};
@@ -265,7 +267,7 @@ sub connect {
 
 		## Indexing keys and default index column.
 		if (defined($args{keys}->[$col])) {
-			$struct{keys}->[$col]	= (!$args{keys}->[$col] && ~$args{keys}->[$col]) ? '0' :
+			$struct{keys}->[$col]	= (!$args{keys}->[$col] && length($args{keys}->[$col])) ? '0' :
 											$args{keys}->[$col] || $struct{keys}->[$col]
 		}
 		$struct{keys}->[$col]		||= 0;
@@ -280,13 +282,13 @@ sub connect {
 
 		## Default values provided by the db struct
 		if (defined($struct{defaults}->[$col])) {
-			$fld_default			=  (!$struct{defaults}->[$col] && ~$struct{defaults}->[$col]) ? '0' :
+ 			$fld_default			=  (!$struct{defaults}->[$col] && length($struct{defaults}->[$col])) ? '0' :
 											$struct{defaults}->[$col] || $fld_default
 		}
 
 		## Default values provided by args to connect()
 		if ( defined($args{defaults}->[$col]) ) {
-			$fld_default			= (!$args{defaults}->[$col] && ~$args{defaults}->[$col]) ? '0' :
+ 			$fld_default			= (!$args{defaults}->[$col] && length($args{defaults}->[$col])) ? '0' :
 												$args{defaults}->[$col] || $fld_default
 		}
 
@@ -609,7 +611,7 @@ sub prepare {
 	# count_unique cooperates by putting its return values into $self->{COUNTS}).
 	# In this example, COUNTS: is actually unnecessary, because COUNTS is tracked by default,
 	# in @BVA::KALE::DATA::PROC::tracks; currently these are tracked:
-	# COUNTS DUPES UNIQUE SUMS RECORDS TOTALS BYTES REDUCE
+	# COUNTS DUPES UNIQUE SUMS RECORDS TOTALS BYTES REDUCE IF
 	$prep_sttmt->{_procs} 		= [ map {
 			my ($proc, $args)	= split /\s*[ ,\(]\s*/ => $_ , 2;
 			$args				||= '';
@@ -897,7 +899,7 @@ sub prep_insert {
 				$def_val	=~ s/^\*(.*)$/$1/s; # ** 2010-08-11
 			}
 
-			$record{$fld}	= (!$def_val && ~$def_val) ? '0' : $def_val || $record{$fld};
+			$record{$fld}	= $def_val ? $def_val : length($def_val) ? '0' : $record{$fld};
 		}
 	}
 
@@ -913,8 +915,8 @@ sub prep_insert {
 
 		for my $col (0..$#flds) {
 			if ( defined($REC[$col]) ) {
-				$record{$flds[$col]} = (!$REC[$col] && ~$REC[$col]) ? '0' :
-					$REC[$col] || $record{$flds[$col]}
+				$record{$flds[$col]} = (!$REC[$col] && length($REC[$col])) ? '0' :
+					($REC[$col] || $record{$flds[$col]})
 			}
 		}
 	}
@@ -931,8 +933,8 @@ sub prep_insert {
 		else {
 			%VALS = map {
 				my ($key, $val) = split / *[:=]>? ?/;
-				defined($val) or $val = '';
-				$val = (!$val && ~$val) ? '0' : $val;
+				$val //= '';
+				$val = (!$val && length($val)) ? '0' : $val;
 				($key, $val)
 			} split / *[,;] */s => $statement{VALUES};
 		}
@@ -940,7 +942,6 @@ sub prep_insert {
 		%record = ( %record, %VALS );
 	}
 
-# 	$statement{INSERT} = [ map { /^\s*(.*?)\s*$/os; $1 } @record{ @flds } ];
 	$statement{INSERT} = [ map { /^\s*(.*?)\s*$/os; $1 } map { defined($_) ? $_ : '' } @record{ @flds } ];
 
 	bless { %{ $self }, %statement }, ref($self) || $self
@@ -986,8 +987,7 @@ sub prep_import {
 				$def_val	= $defs[0];
 				$def_val	=~ s/^\*(.*)$/$1/s; # ** 2010-08-11
 			}
-
-			$record{$fld}	= (!$def_val && ~$def_val) ? 0 : ($def_val || $record{$fld});
+			$record{$fld}	= (!$def_val && length($def_val)) ? 0 : ($def_val || $record{$fld});
 		}
 	}
 
@@ -1003,7 +1003,7 @@ sub prep_import {
 
 		for my $col (0..$#flds) {
 			if ( defined($REC[$col]) ) {
-				$record{$flds[$col]} = (!$REC[$col] && ~$REC[$col]) ? '0' :
+				$record{$flds[$col]} = (!$REC[$col] && length($REC[$col])) ? '0' :
 					$REC[$col] || $record{$flds[$col]}
 			}
 		}
@@ -1017,8 +1017,8 @@ sub prep_import {
 		} else {
 			%VALS = map {
 				my ($key, $val) = split / *[:=]>? ?/;
-				defined($val) or $val = '';
-				$val = (!$val && ~$val) ? '0' : $val;
+				$val //= '';
+				$val = (!$val && length($val)) ? '0' : $val;
 				($key, $val)
 			} split / *[,;] */s => $statement{VALUES};
 		}
@@ -1454,11 +1454,15 @@ sub do_update {
 		# Sanify field values with nulls, protecting zero values
 		# Trim leading and trailing whitespace
 		for my $fld (@flds) {
-			my $datum = defined($self->{CURRENT}{ROW}->{$fld}) ? $self->{CURRENT}{ROW}->{$fld} : '';
-			if ( !$datum &! ~$datum ) {
-				$self->{CURRENT}{ROW}->{$fld} = $self->{_nulls}->{$fld} || '';
+			my $datum;
+			if ( defined($self->{CURRENT}{ROW}->{$fld}) ) {
+				$datum	= $self->{CURRENT}{ROW}->{$fld};
+				$datum	=~ s/^\s*|\s*\z//gs;
+				$datum	||= length($datum) ? '0' : ( $self->{_nulls}->{$fld} || '' );
+			} else {
+				$datum	= $self->{_nulls}->{$fld} || '';
 			}
-			$self->{CURRENT}{ROW}->{$fld} =~ s/^\s*|\s*$//gs;
+			$self->{CURRENT}{ROW}->{$fld} = $datum;
 		}
 
 		# Optional row processing before updating file
@@ -1501,8 +1505,8 @@ sub do_update {
 # INSERT
 sub do_insert {
 	my $self			= shift;
+	my $vals			= $self->{INSERT};
 	my %args			= %{ $self->{WITH} };
-
 	my @flds			= @{ $self->{_head} };
 
 	if ($args{insert_mute}) {
@@ -1517,7 +1521,7 @@ sub do_insert {
 		push @_ => '' if @_ % 2;
 		%exec_params	= @_;
 	}
-
+	
 	# Now add VALUES, if any, from the execute call
 	if ( $exec_params{VALUES} ) {
 		my %VALS;
@@ -1526,14 +1530,14 @@ sub do_insert {
 		} else {
 			%VALS = map {
 				my ($key, $val) = split / *[:=]>? ?/;
-				defined($val) or $val = '';
-				$val = (!$val && ~$val) ? '0' : $val;
+				$val //= '';
+				$val = (!$val && length($val)) ? '0' : $val;
 				($key, $val)
 			} split / *[,;] */s => $exec_params{VALUES};
 		}
-		my %record	= map { ($flds[$_] => $self->{INSERT}->[$_]) } (0..$#flds);
+		my %record	= map { ($flds[$_] => $vals->[$_]) } (0..$#flds);
 		%record = ( %record, %VALS );
-		$self->{INSERT} = [ map { /^\s*(.*?)\s*$/os; $1 } @record{ @flds } ];
+		$vals = [ map { /^\s*(.*?)\s*$/os; $1 } @record{ @flds } ];
 	}
 
 	%args					= (%args, %exec_params);
@@ -1552,8 +1556,7 @@ sub do_insert {
 
 	++$incr;
 
-	my @record			= @{ $self->{INSERT} };
-
+	my @record			= @{ $vals };
 	my $new_id			= "$id_base$incr";
 
 	if ($args{id_override} || $self->{_id_override} ) {
@@ -1624,7 +1627,6 @@ sub do_insert {
 		local *LOCK	= $self->{CURRENT}{LOCK_FH};
 
 		## Print the new data record at the end of the data file
-# 		local $" = $self->{_input_sep};
 		local $" = $self->{_output_sep};
 		print DB "@record", $self->{_record_sep};	## ** 2006-01-01
 
@@ -1714,7 +1716,7 @@ sub do_import {
 
 				my %import_data;
 				for my $K (@flds) {
-					next unless ($s->{$K} || ~$s->{$K});
+					next unless ($s->{$K} or (!$s->{$K} && length($s->{$K})));
 					$import_data{ $K } 				= $s->{$K} || $default_record{$K};
 					next unless $aliases{$K};
 					$import_data{ $aliases{$K} } 	= $s->{$K} || $default_record{$K};
@@ -1926,11 +1928,15 @@ sub do_browse {
 			# Sanify field values with nulls, protecting zero values
 			# Trim leading and trailing whitespace
 			for my $fld (@flds) {
-				my $datum = defined($self->{CURRENT}{ROW}->{$fld}) ? $self->{CURRENT}{ROW}->{$fld} : '';
-				if ( !$datum &! ~$datum ) {
-					$self->{CURRENT}{ROW}->{$fld} = $self->{_nulls}->{$fld} || '';
+				my $datum;
+				if ( defined($self->{CURRENT}{ROW}->{$fld}) ) {
+					$datum	= $self->{CURRENT}{ROW}->{$fld};
+					$datum	=~ s/^\s*|\s*\z//gs;
+					$datum	||= length($datum) ? '0' : ( $self->{_nulls}->{$fld} || '' );
+				} else {
+					$datum	= $self->{_nulls}->{$fld} || '';
 				}
-				$self->{CURRENT}{ROW}->{$fld} =~ s/^\s*|\s*$//gs;
+				$self->{CURRENT}{ROW}->{$fld} = $datum;
 			}
 
  			# optional line processing while browsing; does not change data in file
@@ -2045,13 +2051,15 @@ sub do_index {
 			# Sanify field values with nulls, protecting zero values
 			# Trim leading and trailing whitespace
 			for my $fld (@flds) {
-#  				if ( !$self->{CURRENT}{ROW}->{$fld} &! ~$self->{CURRENT}{ROW}->{$fld} ) {
-#  					$self->{CURRENT}{ROW}->{$fld} = $self->{_nulls}->{$fld};
-# 				}
- 				unless ( $self->{CURRENT}{ROW}->{$fld} || length($self->{CURRENT}{ROW}->{$fld}) ) {
- 					$self->{CURRENT}{ROW}->{$fld} = $self->{_nulls}->{$fld};
+				my $datum;
+				if ( defined($self->{CURRENT}{ROW}->{$fld}) ) {
+					$datum	= $self->{CURRENT}{ROW}->{$fld};
+					$datum	=~ s/^\s*|\s*\z//gs;
+					$datum	||= length($datum) ? '0' : ( $self->{_nulls}->{$fld} || '' );
+				} else {
+					$datum	= $self->{_nulls}->{$fld} || '';
 				}
-				$self->{CURRENT}{ROW}->{$fld} =~ s/^\s*|\s*$//gs;
+				$self->{CURRENT}{ROW}->{$fld} = $datum;
 			}
 
  			# optional line processing while indexing; does not change data in file
@@ -2242,7 +2250,7 @@ sub do_select {
  	}
 
 	## Data variables
-	open my $tbl_fh, "+>", undef
+	open my $tbl_fh, "+>:encoding(UTF-8)", undef
 		or return;
 
 	my @sort_list;
@@ -2255,7 +2263,8 @@ sub do_select {
 			$self->{CURRENT}		= $self->get_lock($src) or next TABLE;
 
 			## Now open the table file
-			open IN, "<", $self->{CURRENT}{FILE} or next TABLE;
+# 			open IN, "<:encoding(UTF-8)", $self->{CURRENT}{FILE} or next TABLE;
+			open IN, "<:raw", $self->{CURRENT}{FILE} or next TABLE;
 
 			$self->{CURRENT}{FH}	= \*IN;
 			$self->{break_table}	= 0;
@@ -2316,11 +2325,15 @@ sub do_select {
 				# Sanify field values with nulls, protecting zero values
 				# Trim leading and trailing whitespace
 				for my $fld (@flds) {
-					my $datum = defined($self->{CURRENT}{ROW}->{$fld}) ? $self->{CURRENT}{ROW}->{$fld} : '';
-					if ( !$datum &! ~$datum ) {
-						$self->{CURRENT}{ROW}->{$fld} = $self->{_nulls}->{$fld} || '';
+					my $datum;
+					if ( defined($self->{CURRENT}{ROW}->{$fld}) ) {
+						$datum	= $self->{CURRENT}{ROW}->{$fld};
+						$datum	=~ s/^\s*|\s*\z//gs;
+						$datum	||= length($datum) ? '0' : ( $self->{_nulls}->{$fld} || '' );
+					} else {
+						$datum	= $self->{_nulls}->{$fld} || '';
 					}
-					$self->{CURRENT}{ROW}->{$fld} =~ s/^\s*|\s*$//gs;
+					$self->{CURRENT}{ROW}->{$fld} = $datum;
 				}
 
 				## Meta-data
@@ -3317,8 +3330,7 @@ sub statement {
 }
 
 sub reveal {
-	goto &struct
-
+	goto &struct;
 }
 
 sub struct {
@@ -3630,7 +3642,6 @@ sub db_struct {
 
 	my @cols = map { $hd_nums{$_} || () } @flds;
 
-# 	join $self->{_record_sep} => map {
 	join $self->{_record_out_sep} => map {
 		my @elements	= @{$_};
 		my $line_label	= shift @elements;
@@ -3654,7 +3665,7 @@ sub db_mod_struct {
 				$fld		= $2;
 				$type		= $3 || $self->{_types}->{$fld} || $self->{_def_type};
 				$size		= $4 || $self->{_sizes}->{$fld} || $self->{_def_size};
-				$def		= $5 || (defined($5) && !$5 && ~$5 ? 0 : '');
+				$def		= $5 || (defined($5) and (!$5 && length($5))) ? 0 : $self->{_defaults}->{$fld} || '';
 				$fmt		= "$type:$size";
 				$col		= $hd_nums{$fld}	= scalar keys %hd_nums;
 
@@ -3670,7 +3681,7 @@ sub db_mod_struct {
 				$fld		= $2;
 				$type		= $3 || $self->{_types}->{$fld} || $self->{_def_type};
 				$size		= $4 || $self->{_sizes}->{$fld} || $self->{_def_size};
-				$def		= $5 || (defined($5) && !$5 && ~$5 ? 0 : '');
+				$def		= $5 || (defined($5) and (!$5 && length($5))) ? 0 : $self->{_defaults}->{$fld} || '';
 				$fmt		= "$type:$size";
 				$col		= $hd_nums{$fld};
 				if (exists $hd_nums{$fld}) {
@@ -3718,7 +3729,7 @@ sub db_out_struct {
 				$fld		= $2;
 				$type		= $3 || $self->{_types}->{$fld} || $self->{_def_type};
 				$size		= $4 || $self->{_sizes}->{$fld} || $self->{_def_size};
-				$def		= $5 || (defined($5) && !$5 && ~$5 ? 0 : '');
+				$def		= $5 || (defined($5) and (!$5 && length($5))) ? 0 : $self->{_defaults}->{$fld} || '';
 				$fmt		= "$type:$size";
 				$col		= $hd_nums{$fld}	= scalar keys %hd_nums;
 
@@ -3734,7 +3745,8 @@ sub db_out_struct {
 				$fld		= $2;
 				$type		= $3 || $self->{_types}->{$fld} || $self->{_def_type};
 				$size		= $4 || $self->{_sizes}->{$fld} || $self->{_def_size};
-				$def		= $5 || (defined($5) && !$5 && ~$5 ? 0 : '');
+				$def		= $5 || (defined($5) and (!$5 && length($5))) ? 0 : $self->{_defaults}->{$fld} || '';
+				
 				$fmt		= "$type:$size";
 				if (exists $hd_nums{$fld}) {
 					$col		= $hd_nums{$fld};
@@ -3756,7 +3768,6 @@ sub db_out_struct {
 	}
 
  	my @cols = map { $hd_nums{$_} || () } @flds;
-#	my @cols = 0 .. $#flds;
 
 	join $self->{_record_out_sep} => map {
 		my @elements	= @{$_};

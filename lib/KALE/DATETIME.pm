@@ -8,7 +8,7 @@ use warnings;
 use Time::Local;
 
 ### tell_time #####
-	## Formats: date time, file date, stamp, 
+	## Formats: date time, file date, stamp,
 	## long time, exact time, date, time, secs
 	## iso, iso date, iso time
 	## use: tell_time('exact time' [, time in secs | iso date-time ]);
@@ -19,41 +19,41 @@ sub tell_time {
 
 	# name of the format for output
 	my $format		= shift() || 'iso';
-	
+
 	# date-time string defaults to now
 	my $time		= shift() || time;
-	
+
 	# optional flag regarding non-date strings
 	my $return_text	= shift() || '';
-	
+
 	# get system time in secs
 	my $seconds = parse_to_secs($time);
-	
+
 	return $time if $return_text and not $seconds;
-	
+
 	format_secs($format, $seconds);
 }
 
 sub format_secs {
 	# name of the format for output
 	my $format		= shift() || 'iso';
-	
+
 	# the time in system seconds
 	my $seconds	= shift;
-	
+
 	# Sanity
 	$seconds		 		or return '';
 	$seconds =~ /^\d+$/ 	or return '';
 
 	# Derive standard local date values/indices
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($seconds);
-	
+
 	$year			+= 1900;
 	my $mil_hour	= $hour;
 	my $AP			= $hour > 11 ? 'PM' : 'AM' ;
 	$hour			= $hour % 12 || 12;
 	my $season		= $isdst ? 'DST' : 'STD' ; # local savings/standard time
-	
+
 	my $day_secs	= $sec + (60 * $min) + (3600 * $mil_hour) || 0;
 
 	{
@@ -61,99 +61,109 @@ sub format_secs {
 		/date.{0,3}time/i and
 		sprintf "%s %s, %04d, at %d:%02d %s", $BVA::KALE::DATETIME::MONTHS[$mon], $mday, $year, $hour, $min, $AP
 			or
-		/long.{0,3}date/i and 
+		/day.{0,3}time/i and
+		sprintf "%s %s at %d:%02d %s", $BVA::KALE::DATETIME::MONTHS[$mon], $mday, $hour, $min, $AP
+			or
+		/long.{0,3}date/i and
 		sprintf "%s, %s %d, %d", $BVA::KALE::DATETIME::WEEKDAYS[$wday], $BVA::KALE::DATETIME::MONTHS[$mon], $mday, $year
 			or
-		/abbr.{0,3}date/i and 
+		/abbr.{0,3}date/i and
 		sprintf "%s %d, %d", $BVA::KALE::DATETIME::ABBR_MONTHS[$mon], $mday, $year
 			or
-		/^file.{0,2}date/i and 
+		/^file.{0,2}date/i and
 		sprintf "%02d.%02d.%02d", $mon+1, $mday, $year % 100
 			or
-		/iso.{0,2}file.{0,2}date$/i and 
+		/iso.{0,2}file.{0,2}date$/i and
 		sprintf "%04d.%02d.%02d", $year, $mon+1, $mday
 			or
-		/iso.{0,2}file.{0,2}date.{0,2}secs/i and 
+		/iso.{0,2}file.{0,2}date.{0,2}secs/i and
 		sprintf "%04d.%02d.%02d.%05d", $year, $mon+1, $mday, $day_secs
 			or
-		/dot.{0,2}yearmon/i and 
+		/dot.{0,2}yearmon/i and
 		sprintf "%04d.%02d", $year, $mon+1
 			or
-		/^\s*date\s*$/i and 
+		/^\s*date\s*$/i and
 		sprintf "%s %d, %d", $BVA::KALE::DATETIME::MONTHS[$mon], $mday, $year
 			or
-		/^\s*month.{0,2}date\s*$/i and 
+		/^\s*month.{0,2}date\s*$/i and
 		sprintf "%s %d", $BVA::KALE::DATETIME::MONTHS[$mon], $mday
 			or
-		/^\s*day.{0,2}date\s*$/i and 
+		/^\s*day.{0,2}date\s*$/i and
 		sprintf "%s, %s %d, %d", $BVA::KALE::DATETIME::WEEKDAYS[$wday], $BVA::KALE::DATETIME::MONTHS[$mon], $mday, $year
 			or
-		/^\s*iso\s*$/i and 
+		/^\s*day.{0,2}date.{0,2}time\s*$/i and
+		sprintf "%s, %s %d, %d", $BVA::KALE::DATETIME::WEEKDAYS[$wday], $BVA::KALE::DATETIME::MONTHS[$mon], $mday, $year, $hour, $min, $AP
+			or
+		/^\s*iso\s*$/i and
 		sprintf "%4.4d-%2.2d-%2.2d %2.2d:%2.2d:%2.2d",
 		$year, $mon + 1, $mday, $mil_hour, $min, $sec
 			or
-		/^iso.{0,2}store\s*$/i and 
+		/^iso.{0,2}store\s*$/i and
 		sprintf "%4.4d-%2.2d-%2.2dT%2.2d:%2.2d:%2.2d",
 		$year, $mon + 1, $mday, $mil_hour, $min, $sec
 			or
-		/^iso.{0,2}date\s*$/i and 
+		/^iso.{0,2}date\s*$/i and
 		sprintf "%4.4d-%2.2d-%2.2d", $year, $mon + 1, $mday
 			or
-		/^\s*(time.{0,2})?stamp\s*$/i and 
+		/^ics\s*$/i and
+		sprintf "%4.4d%2.2d%2.2dT%2.2d%2.2d%2.2d",
+		$year, $mon + 1, $mday, $mil_hour, $min, $sec
+			or
+		/^\s*(time.{0,2})?stamp\s*$/i and
 		sprintf "%02d/%02d/%04d %2d:%02d %s", $mon+1, $mday, $year, $hour, $min, $AP
 			or
-		/^iso.{0,2}(time.{0,2})?stamp\s*$/i and 
+		/^iso.{0,2}(time.{0,2})?stamp\s*$/i and
 		sprintf "%4.4d-%2.2d-%2.2d %2d:%02d %s", $year, $mon + 1, $mday, $hour, $min, $AP
 			or
-		/^\s*date.{0,2}stamp\s*$/i and 
+		/^\s*date.{0,2}stamp\s*$/i and
 		sprintf "%02d/%02d/%02d", $mon+1, $mday, $year % 100
 			or
-		/short.{0,3}date\s*$/i and 
+		/short.{0,3}date\s*$/i and
 		sprintf "%d/%d/%02d", $mon+1, $mday, $year % 100
 			or
-		/e?x(ce)?l.{0,3}date\s*$/i and 
+		/e?x(ce)?l.{0,3}date\s*$/i and
 		sprintf "%d-%s-%02d", $mday, $BVA::KALE::DATETIME::ABBR_MONTHS[$mon], $year % 100
 			or
-		/long.{0,3}time\s*$/i and 
+		/long.{0,3}time\s*$/i and
 		sprintf "%d:%02d %s %s", $hour, $min, $AP, $season
 			or
-		/exact.{0,3}time\s*$/i and 
+		/exact.{0,3}time\s*$/i and
 		sprintf "%02d:%02d:%02d", $mil_hour, $min, $sec
 			or
-		/iso.{0,3}time\s*$/i and 
+		/iso.{0,3}time\s*$/i and
 		sprintf "%2.2d:%2.2d:%2.2d", $mil_hour, $min, $sec
 			or
-		/^\s*time\s*$/i and 
+		/^\s*time\s*$/i and
 		sprintf "%d:%02d %s", $hour, $min, $AP
 			or
-		/^\s*wday\s*num\s*$/i and 
+		/^\s*wday\s*num\s*$/i and
 		$wday + 1
 			or
-		/^\s*wday\s*$/i and 
+		/^\s*wday\s*$/i and
 		$BVA::KALE::DATETIME::WEEKDAYS[$wday]
 			or
-		/^\s*mday\s*$/i and 
+		/^\s*mday\s*$/i and
 		$mday
 			or
-		/^\s*yday\s*$/i and 
+		/^\s*yday\s*$/i and
 		$yday + 1
 			or
-		/^\s*mon\s*$/i and 
+		/^\s*mon\s*$/i and
 		$BVA::KALE::DATETIME::MONTHS[$mon]
 			or
-		/^\s*short\s*mon\s*$/i and 
+		/^\s*short\s*mon\s*$/i and
 		$BVA::KALE::DATETIME::ABBR_MONTHS[$mon]
 			or
-		/^\s*year\s*$/i and 
+		/^\s*year\s*$/i and
 		$year
 			or
-		/^\s*yy\s*$/i and 
+		/^\s*yy\s*$/i and
 		sprintf "%02d", $year % 100
 			or
-		/^\s*mm\s*$/i and 
+		/^\s*mm\s*$/i and
 		sprintf "%02d", $mon+1
 			or
-		/^\s*secs\s*$/i and 
+		/^\s*secs\s*$/i and
 		$seconds
 	}
 }
@@ -166,13 +176,13 @@ sub parse_to_secs {
 	$time eq '-' 				and return $time;
 	$time eq 'now' 				and return time;
 	$time =~ /^[-0: \/]*$/		and return time;
-	
+
 	# rough way to find dates like 082602 (2002-08-26)
 	$time =~ s{^((?:0|1)\d)(\d\d)(\d\d)$}{$1/$2/$3};
 	$time =~ s{^((?:0|1)\d)(\d\d)((?:19|20)\d\d)$}{$1/$2/$3};
 	$time =~ s{^((?:19|20)\d\d)(\d\d)(\d\d)$}{$1-$2-$3};
 	$time =~ /^\d+$/ && $time > 123103		and return $time;  # it's not 12-31-03
-	
+
 	# dates in iso format CCYY-MM-DD[[T| ]HH:MM[:SS]][ AM|PM][ *]
 	iso_order($time)
 		||
@@ -188,15 +198,15 @@ sub parse_to_secs {
 	# dates in US format MM/DD/[YY]YY, MM.DD.[YY]YY, MM-DD-[YY]YY [HH:MM[:SS]][ AM|PM][ *]
 	us_string($time)
 		||
-	''	
+	''
 }
 
 sub iso_order {
 	my $time = shift;
 	my (@date,$AP);
-	
+
 	# dates in iso format CCYY-MM-DD[[T| ]HH:MM[:SS]][ AM|PM][ *]
-	if ( (@date[0..5],$AP) = 
+	if ( (@date[0..5],$AP) =
 	( $time =~ m#^
  		\s*
  		(\d{4})
@@ -238,7 +248,7 @@ sub ical_date_time {
 	my (@date);
 
 	# dates in iCal format CCYYMMDDTHHMMSS[Z]
-	if ( (@date[0..5]) = 
+	if ( (@date[0..5]) =
 	( $time =~ m#^
  		\s*
  		(\d{4})
@@ -293,20 +303,20 @@ sub month_name {
  		)?
  		(?:
  		(.*?)
- 		)?$#ix ) 
+ 		)?$#ix )
  		) {
-		
+
 		$mo			= lc(substr($mo,0,3));
 		return unless $BVA::KALE::DATETIME::MONTH_NUM_TBL{$mo};
 # 		$short_yr	||= ($mo eq 'jan' ? $BVA::KALE::DATETIME::THIS_YY : $BVA::KALE::DATETIME::THIS_YY - 1);
  		$short_yr	||= $BVA::KALE::DATETIME::THIS_YY;
 		$cent		||= ($short_yr < 70 ? $BVA::KALE::DATETIME::THIS_CC : $BVA::KALE::DATETIME::THIS_CC - 1);
-		$date[0]	= sprintf qq{%2d%02d}, $cent, $short_yr;		
+		$date[0]	= sprintf qq{%2d%02d}, $cent, $short_yr;
 		$date[1]	= $BVA::KALE::DATETIME::MONTH_NUM_TBL{$mo} - 1;
 
 		@date		= map { defined($_) ? $_+0 : 0 } @date;
 		$date[2] ||= 1;
-		return if $date[2] > 31; 
+		return if $date[2] > 31;
 		$date[3]	+= 12 if ($AP and $AP =~/P/i and $date[3] < 12);
 		$date[3]	= 0 if ($AP and $AP =~/A/i and $date[3] == 12);
 		@date		= reverse @date;
@@ -348,15 +358,15 @@ sub euro_month_name {
  		(?:
  		(.*?)
  		)?$
- 		#ix) 
+ 		#ix)
  		) {
-		
+
 		$mo			= lc(substr($mo,0,3));
 		return unless $BVA::KALE::DATETIME::MONTH_NUM_TBL{$mo};
 #		$short_yr	||= ($mo eq 'jan' ? $BVA::KALE::DATETIME::THIS_YY : $BVA::KALE::DATETIME::THIS_YY - 1);
  		$short_yr	||= $BVA::KALE::DATETIME::THIS_YY;
 		$cent		||= ($short_yr < 70 ? $BVA::KALE::DATETIME::THIS_CC : $BVA::KALE::DATETIME::THIS_CC - 1);
-		$date[0]	= sprintf qq{%2d%02d}, $cent, $short_yr;		
+		$date[0]	= sprintf qq{%2d%02d}, $cent, $short_yr;
 		$date[1]	= $BVA::KALE::DATETIME::MONTH_NUM_TBL{$mo} - 1;
 
 		@date		= map { defined($_) ? $_+0 : 0 } @date;
@@ -401,8 +411,8 @@ sub us_string {
 
 		$short_yr	||= $BVA::KALE::DATETIME::THIS_YY;
 		$cent		||= ($short_yr < 39 ? $BVA::KALE::DATETIME::THIS_CC : $BVA::KALE::DATETIME::THIS_CC - 1);
-		$date[0]	= sprintf qq{%2d%02d}, $cent, $short_yr;		
-		
+		$date[0]	= sprintf qq{%2d%02d}, $cent, $short_yr;
+
 		@date		= map { defined($_) ? $_+0 : 0 } @date;
 		$date[1]	> 0 and $date[1]--;
 		$date[3]	+= 12 if ($AP and $AP =~/P/i and $date[3] < 12);
@@ -411,6 +421,46 @@ sub us_string {
 		return timelocal(@date);
 	}
 
+}
+
+sub duration_to_secs {
+	my $self		= shift;
+	my $duration	= shift;
+	my $secs		= 0;
+	if ($duration =~ /^\s*-?([.0-9]+)\s*(d[ays]*)?\s*$/) {
+		$secs	= $1 * 86400;
+	} elsif ($duration =~ /^\s*-?([.0-9]+)\s*w[eks]*\s*$/) {
+		$secs	= $1 * 86400 * 7;
+	} elsif ($duration =~ /^\s*-?([.0-9]+)\s*h[ours]*\s*$/) {
+		$secs	= $1 * 3600;
+	} elsif ($duration =~ /^\s*-?([.0-9]+)\s*m[inutes]*\s*$/) {
+		$secs	= $1 * 60;
+	}
+	return $secs
+}
+
+sub duration_to_days {
+	my $self		= shift;
+	my $duration	= shift;
+	my $round		= shift || 0;
+	my $days		= 0;
+	if ($duration =~ /^\s*-?([.0-9]+)\s*(d[ays]*)?\s*$/) {
+		$days	= $1;
+	} elsif ($duration =~ /^\s*-?([.0-9]+)\s*w[eks]*\s*$/) {
+		$days	= $1 * 7;
+	} elsif ($duration =~ /^\s*-?([.0-9]+)\s*h[ours]*\s*$/) {
+		$days	= $1 / 24;
+	} elsif ($duration =~ /^\s*-?([.0-9]+)\s*m[inutes]*\s*$/) {
+		$days	= $1 / (24 * 60);
+	}
+	return '0' unless $days;
+	if ($round =~ /^1|up/i) {
+		my $fract	= $days - int($days);
+		$days		= int($days) + ($fract > 0 ? 1 : 0);
+	} elsif ($round =~ /^-1|down|off/) {
+		$days	= int($days);
+	}
+	return $days;
 }
 
 sub list_months {
@@ -484,18 +534,18 @@ sub month_max_days {
 	my $self = shift;
 	unshift( @_, $self ) unless ref($self);
 
-	@BVA::KALE::DATETIME::MONTH_MAX_DAYNUM{@_};	
+	@BVA::KALE::DATETIME::MONTH_MAX_DAYNUM{@_};
 }
 
 BEGIN {
 
 	# Derive standard local date values/indices
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
 
 	$BVA::KALE::DATETIME::THIS_YYYY	= $year + 1900;
-	
+
 	$BVA::KALE::DATETIME::THIS_YY	= $year % 100;
-	
+
 	$BVA::KALE::DATETIME::THIS_CC	= int(($year + 1900)/100);
 
 	@BVA::KALE::DATETIME::MONTHS			= qw/
@@ -512,7 +562,7 @@ BEGIN {
 		November
 		December
 	/;
-	
+
 	@BVA::KALE::DATETIME::ABBR_MONTHS	= qw/
 		Jan
 		Feb
@@ -527,7 +577,7 @@ BEGIN {
 		Nov
 		Dec
 	/;
-	
+
 	@BVA::KALE::DATETIME::WEEKDAYS		= qw/
 		Sunday
 		Monday
@@ -537,7 +587,7 @@ BEGIN {
 		Friday
 		Saturday
 	/;
-	
+
 	@BVA::KALE::DATETIME::ABBR_WEEKDAYS		= qw/
 		Sun
 		Mon
@@ -557,7 +607,7 @@ BEGIN {
 		F
 		S
 	/;
-	
+
 	@BVA::KALE::DATETIME::MONTHDAY_NUMS		=qw/
 		1
 		2
@@ -591,7 +641,7 @@ BEGIN {
 		30
 		31
 	/;
-	
+
 	%BVA::KALE::DATETIME::MONTH_NUM_TBL		= (
 		jan	=> 1,	Jan	=> 1,	January		=> 1,
 		feb	=> 2,	Feb	=> 2,	February	=> 2,
@@ -605,7 +655,7 @@ BEGIN {
 		oct	=> 10,	Oct	=> 10,	October		=> 10,
 		nov	=> 11,	Nov	=> 11,	November	=> 11,
 		dec => 12,	Dec => 12,	December	=> 12,
-	);	
+	);
 
 
 	%BVA::KALE::DATETIME::MONTH_MAX_DAYNUM		= (
@@ -622,7 +672,7 @@ BEGIN {
 						'10'	=> 31,	oct		=> 31,	Oct		=> 31,	October		=> 31,
 						'11'	=> 30,	nov		=> 30,	Nov		=> 30,	November	=> 30,
 						'12'	=> 31,	dec 	=> 31,	Dec 	=> 31,	December	=> 31,
-	);	
+	);
 
 }
 

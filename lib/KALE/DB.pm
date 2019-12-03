@@ -23,19 +23,19 @@ sub _DBI {
 sub dbi ($;@) {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	
- 	$KEY{_dbi}			||= $obj->_DBI(@_);
+
+	$KEY{_dbi}			||= $obj->_DBI(@_);
 }
 
 ## dbh
 ## Returns the UI object's database handler
 ## Creates the handler if necessary, passing its args to db_connect()
-## Stores the database handler in the metadata fld _dbh 
+## Stores the database handler in the metadata fld _dbh
 sub dbh ($;@) {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	
-  	$KEY{_dbh} 			||= $obj->db_connect(@_) || '';  # changed 2012-08-31  ||= 	
+
+  	$KEY{_dbh} 			||= $obj->dbi->dbh || $obj->db_connect(@_) || '';  # changed 2012-08-31  ||=
 }
 
 ## db_prepare
@@ -46,8 +46,37 @@ sub dbh ($;@) {
 sub db_prepare ($;@) {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	
+
  	$KEY{_sth} 			= @_ ? $obj->dbh->prepare(shift(@_),@_) : $obj->dbh->prepare('SELECT') || '';
+ 	
+	if ( $KEY{_sth}->{NAME_lc} ) {
+		my @itr_hdr			= @{ $KEY{_sth}->{NAME_lc} };
+		$KEY{_sth}->bind_columns( \( @KEY{ @itr_hdr } ));	
+	}
+	
+	return $KEY{_sth};
+}
+
+sub db_structure ($;@) {
+	my $obj				= shift;
+	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+
+ 	$KEY{_db_struct} 	= $obj->dbh->struct() || '';
+}
+
+sub db_table_info {
+	my $obj				= shift;
+	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+
+	my $table_name		= shift;
+
+	my $tableInfo_sth	= $obj->dbh->prepare(qq{PRAGMA table_info($table_name)});
+	$tableInfo_sth->execute();
+	my @flds;
+	while (my $col = $tableInfo_sth->fetchrow_arrayref()) {
+		push @flds => $col->[1];
+	}
+	{fields	=> [@flds]};
 }
 
 ## sth
@@ -56,12 +85,12 @@ sub db_prepare ($;@) {
 sub sth ($;@) {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	
+
 	unless ($KEY{_sth}) {
 		$obj->charge_err( "This database handler has not prepared a statement handler." );
 		return;
 	}
-	
+
  	$KEY{_sth};
 }
 
@@ -72,7 +101,7 @@ sub sth ($;@) {
 sub auto_sth ($;@) {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	
+
  	$KEY{_sth} 			= @_ ? $obj->db_prepare(shift(@_),@_) : $KEY{_sth} ? $KEY{_sth} : $obj->db_prepare();
 }
 
@@ -87,7 +116,7 @@ sub sth_destroy ($;@) {
 		$obj->charge_err( "No statement handler to delete." );
 		return
 	}
-	
+
 	delete $KEY{_sth} || '';
 }
 
@@ -100,38 +129,38 @@ sub sth_destroy ($;@) {
 sub db_cursor ($;$) {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	
+
 	return $KEY{_sth}->cursor(shift) if $KEY{_sth} && $KEY{_sth}->{iterator};
-	
+
 	return;
 }
 
 ## db_charge
 ## Charges the object's fields with data from the next record from the iterator;
-## returns false if there is no statement handler, or if the 
-## iterator has already emitted the last record and not been reset. 
+## returns false if there is no statement handler, or if the
+## iterator has already emitted the last record and not been reset.
 ## Charging is restricted to any optional args that are valid fields
 ## available from the iterator (ie, specified by the handler's SELECT list);
 ## if no args are provided, all fields available from the iterator are charged.
-## 
+##
 ## NOTE: db_charge IMMEDIATELY clears ALL data fields associated with the database,
 ## not just the fields available or requested from the iterator;
 ## this happens even if there turns out to be no handler or no remaining record.
 sub db_charge ($;@) {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
- 	
- 	$obj->clear(@{ $KEY{_dbh}->{_head} });
-	
+
+ 	$obj->clear(@{ $KEY{_dbh}->{_head} || [] });
+
  	return unless $KEY{_sth};
- 	
+
  	my $data			= $KEY{_sth}->fetchrow_hashref;
  	return unless $data;
- 	
+
  	my @itr_hdr			= @{ $KEY{_sth}->cursor('hdr') };
  	my %itr_flds		= map { $_ => 1 } @itr_hdr;
 	my @flds			= @_ ? grep( { $itr_flds{$_} } @_ ) : @itr_hdr;
-	
+
  	$obj->charge_these([@flds], @$data{@flds});
 }
 
@@ -142,7 +171,7 @@ sub db_clear ($;@) {
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
 
  	$obj->clear(@{ $KEY{_dbh}->{_head} });
- 	
+
 	%KEY
 }
 
@@ -156,11 +185,11 @@ sub db_clear ($;@) {
 sub db_connect ($;@) {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	
+
 	my %args;
 	my $dbh;
-	
-	if (ref($_[0]) =~ /HASH/) { 
+
+	if (ref($_[0]) =~ /HASH/) {
 		%args = %{ $_[0] }
 	} elsif (@_>1) {
 		push @_ => '' if @_ % 2;
@@ -168,7 +197,7 @@ sub db_connect ($;@) {
 	} else {
 		%args	= ( file => shift )
 	}
-	
+
 	if ($args{dbx}) {
 		$dbh	= do $args{dbx};
 	} elsif ( ($args{dbx} = $args{file} || $args{db} || '') =~ /\.dbx$/ ) {
@@ -200,10 +229,10 @@ sub db_connect ($;@) {
 sub dbx_connect ($;@) {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	
+
 	my (%args,$dbh,$dbx);
-	
-	if (ref($_[0]) =~ /HASH/) { 
+
+	if (ref($_[0]) =~ /HASH/) {
 		%args = %{ $_[0] };
 	} elsif (@_>1) {
 		push @_ => '' if @_ % 2;
@@ -212,7 +241,7 @@ sub dbx_connect ($;@) {
 		%args	= ( file => shift );
 	}
 	$args{input_sep}	||= "\t";
-	
+
 	if ($args{refresh}) {
 		my $tmp_dbh	= $obj->dbi()->connect(\%args)
 					or $obj->charge_err( "Connect problem:" . $obj->dbi()->messages('err') ) and return;
@@ -231,9 +260,9 @@ sub dbx_connect ($;@) {
 	unless ($dbx) {
 		my $new_dbh = $obj->dbi()->connect(\%args)
 			or $obj->charge_err( "Connect problem:" . $obj->dbi()->messages('err') ) and return;
-		$dbx	= $new_dbh->save_connection();	
+		$dbx	= $new_dbh->save_connection();
 	}
-	
+
 	$dbh	= do $dbx;
 	if ($dbh) {
 		$obj->charge_db_meta($dbh)
@@ -250,11 +279,11 @@ sub dbx_connect ($;@) {
 sub charge_db_meta ($;@) {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-		
+
 	my $dbh				= $_[0] || $obj->db_connect(@_)
 		or return '';
-	
-	## Give the KALE object the database handler 		
+
+	## Give the KALE object the database handler
 	## and get the meta-data from the database
 	$obj->charge_meta({
  		_dbh			=> $dbh,
@@ -263,10 +292,10 @@ sub charge_db_meta ($;@) {
 		_type_RE		=> $dbh->type_RE,
 		_struct			=> $dbh->db_struct,
 	});
-	
+
 	$obj->list_items($dbh->db_base_name() . '_fld_list', $dbh->fields);
 	$obj->list_items($dbh->db_base_name() . '_label_list', $dbh->labels);
-	
+
 }
 
 

@@ -12,7 +12,7 @@ use Data::Dumper;
 
 ## Make Selector [updated 2013-03-28]
 # Returns the closure used for testing selection matches
-# ** Revised 2013-03 to use a parser created with Parse::RecDscent; the parser is 
+# ** Revised 2013-03 to use a parser created with Parse::RecDscent; the parser is
 # accessed with the method ->_parser(), which calls $parser = DATA::WHERE::Parser->new()
 # and memoizes the parser.
 # ** Revised 2013-02-03 to allow search fields to be identified with the '+' or '-' wildcard;
@@ -33,7 +33,7 @@ use Data::Dumper;
 sub make_selector {
 	my ($self,$sttmt)	= @_;
 	my %init;
-	
+
 	$init{acceptor}		= {
 		where		=> '_ALL_',
 		count		=> 0,
@@ -65,26 +65,26 @@ sub make_selector {
 	} elsif ($sttmt eq '_NONE_') {
 		return $init{rejector};
 	}
-	
+
 	# Check for balanced parentheses
 	unless ($self->parens_balanced($sttmt)) {
 		$init{rejector}->{phrase}	.= qq{. Unbalanced parentheses in Search Phrase};
 		$init{rejector}->{error}	= '1';
 		return $init{rejector};
-	} 
-	
+	}
+
 	# Substitute ' AND ' for comma, for legacy compatibility (WHERE home_city ^ san, home_address ~ hanover)
 	$sttmt	=~ s/\s*,\s*/' AND '/ge;
-	
+
 	# Now parse $where and build its criteria into a selector
 	my $where			= $sttmt;
 	my $acceptor		= $init{acceptor};
 	my $rejector		= $init{rejector};
- 	my @parts			= $self->_parser($where);	
+ 	my @parts			= $self->_parser($where);
  	my @chunks			= $self->_chunker(@parts);
  	my @groups			= $self->_grouper(@chunks);
 	my @tagged_groups	= $self->_tagger(@groups);
-	
+
 	my $selector		= $self->_parse_conditions(\@tagged_groups);
 	if ($selector->{error} or !exists $selector->{'test'}) {
 		$rejector->{phrase}	.= qq{. } . ($selector->{'phrase'} || 'Failure') . qq{ [based on "$where"]};
@@ -122,7 +122,7 @@ sub _RE_parser {
 # 		([^()]+)?
 # 		(
 # 			(?<! [:=><~!^#*@])\(      # opening paren NOT preceded by sttmt op to allow parens in regexes
-# 			(?:				
+# 			(?:
 # 				[^()]++
 # 				|
 #  				(??{ $np }) # compiled pattern referring to itself
@@ -136,7 +136,7 @@ sub _RE_parser {
 # 		([^()]+)?
 # 		(
 # 			(?<! \S)\(      # opening paren NOT preceded by non-space to allow parens in regexes
-# 			(?:				
+# 			(?:
 # 				[^()]++
 # 				|
 #  				(??{ $np }) # compiled pattern referring to itself
@@ -150,7 +150,7 @@ sub _RE_parser {
 # 		(.*)
 # 		(
 # 			(?<! \S)\(      # opening paren NOT preceded by non-space to allow parens in regexes
-# 			(?:				
+# 			(?:
 # 				[^()]++
 # 				|
 #  				(??{ $np }) # compiled pattern referring to itself
@@ -166,7 +166,7 @@ sub _RE_parser {
 		(?<! [[:punct:]])
 		(\()      # opening paren NOT preceded by punctuation, to allow parens in regexes
 		(
-			(?:				
+			(?:
 				[^()]++
 				|
  				(??{ $np }) # compiled pattern referring to itself
@@ -181,16 +181,16 @@ sub _RE_parser {
 		next unless defined $str;
 		$str =~ s/^\s*(.*)\s*$/$1/;
 		next unless length($str);
-		
+
 		my @str_parts;
 # 		my $crit_match		= qr/(?:\S+) ?(?:[:=><~!^#*@]{1,2})(?:.+)/;
 		my $crit_match		= qr/(?:[A-Za-z][\w_.:-]+) ?(?:[:=><~!^#*@]{1,2})(?:.+)/;
 		my $or_group_match	= qr/\((?:$crit_match\s+OR\s){1,}\s*$crit_match\)/;
 		my $and_group_match	= qr/\(?(?:(?:$crit_match|$or_group_match)\s+AND\s){1,}\s*(?:$crit_match|$or_group_match)\)?/;
-		
+
  		if (@str_parts	= $str =~ /(?:($and_group_match)( OR )?){1,}\s*($and_group_match)/g ) {
 #		if (@str_parts	= $str =~ /(?:($and_group_match)( OR )){1,}\s*($crit_match|$and_group_match)/g ) {
-			
+
 		} elsif ($str =~ /^(.*?)($and_group_match)(.*)$/ ) {
 			@str_parts	= ($1,$2,$6);
 		} elsif ($str =~ /^(.*?)($or_group_match)(.*)$/ ) {
@@ -219,12 +219,12 @@ sub _RE_parser {
 			} elsif ($str =~ /^\(([^()]+)\)$/) {
 				$str	= $1 unless $str =~ / (OR|AND) /;
 			} elsif ($str =~ /([^()]*?) ?([:=><~!^#*@]{1,2})(.*)/) {
-				
+
 			}
 			push @parts => $str;
 			#die "Here" if $str =~ /last=/;
 		}
-	}	
+	}
 	#die join( ' | ' => grep { $_ } @parts), "\n";
 # 	return grep { $_ } splice @parts;
 	return grep { $_ } splice @parts;
@@ -238,7 +238,9 @@ sub _parser {
 		require BVA::KALE::DATA::WHERE::Parser;
 		$self->{_sttmt_parser}	= BVA::KALE::DATA::WHERE::Parser->new();
 	}
-	return $self->{_sttmt_parser}->list($sttmt);
+	eval {
+		return $self->{_sttmt_parser}->list($sttmt);
+	} or die "Couldn't deal with '$sttmt': $@ \n";
 }
 
 sub _chunker {
@@ -274,7 +276,7 @@ sub _chunker {
 	}
 	return @chunks;
 }
-	
+
 sub _grouper {
 	my $self	= shift;
 	my @chunks	= @_;
@@ -298,8 +300,8 @@ sub _grouper {
  			push @{ $groups[$group_idx] } => $chunk;
 #			push @{ $groups[$group_idx] } => ref($chunk) eq 'ARRAY' ? @{ $chunk } : $chunk;
 		}
-	}	
- 	return @groups;		
+	}
+ 	return @groups;
 }
 
 sub _tagger {
@@ -349,7 +351,7 @@ sub _parse_conditions {
 			$cur_cond{error}	= 1;
 			my @subconditions	= ('S');
 			push @subconditions => \%cur_cond;
-			push @conditions => $parse_depth > 0 ? $self->_assemble_test_subs(@subconditions) : $self->_final_selector(@subconditions);			
+			push @conditions => $parse_depth > 0 ? $self->_assemble_test_subs(@subconditions) : $self->_final_selector(@subconditions);
 		} elsif ($fld =~ /^(.+?)([+-])$/) {
 			my $fldbase		= $1;
 			my $inner_op	= ($2 eq '+' ? 'O' : 'A');
@@ -360,7 +362,7 @@ sub _parse_conditions {
 				$cur_cond{error}	= 1;
 				my @subconditions 	= ('S');
 				push @subconditions => \%cur_cond;
-				push @conditions 	=> $self->_assemble_test_subs(@subconditions);				
+				push @conditions 	=> $self->_assemble_test_subs(@subconditions);
 				next CONDITION;
 			}
 			my @subconditions	= ($inner_op);
@@ -388,7 +390,7 @@ sub _parse_conditions {
 			$cur_cond{error}	= 1;
 			my @subconditions	= ('S');
 			push @subconditions => \%cur_cond;
-			push @conditions => $parse_depth > 0 ? $self->_assemble_test_subs(@subconditions) : $self->_final_selector(@subconditions);			
+			push @conditions => $parse_depth > 0 ? $self->_assemble_test_subs(@subconditions) : $self->_final_selector(@subconditions);
 		}
 	}
  	return $parse_depth > 1 ? $self->_assemble_test_subs(@conditions) : $self->_final_selector(@conditions);
@@ -412,8 +414,8 @@ sub _sttmts_to_tests {
 		phrase	=> 'Incomplete Condition',
 		canon	=> join '' => ($fld, $rel, $val),
 	);
-	
-	
+
+
 	my $op	= $self->_operators(\%current_condition);
 	$current_condition{test}	= $op->{test};
 	$current_condition{evalstr}	= $op->{evalstr};
@@ -430,13 +432,13 @@ sub _assemble_test_subs {
 	my %test;
 	my $has_error	= 0;
 	#return if (@tests == 1 && $tests[0] eq 'O');
-	$test{type}	= 
-		@tests > 1 ? 
-			shift @tests 
-		: @tests == 1 ? 
-			ref($tests[0]) eq 'HASH' ? 
-				$tests[0]->{type} 
-			: 'S' 
+	$test{type}	=
+		@tests > 1 ?
+			shift @tests
+		: @tests == 1 ?
+			ref($tests[0]) eq 'HASH' ?
+				$tests[0]->{type}
+			: 'S'
 		: 'U';
 	if ($test{type} eq 'S') {
 		$test{test}	= sub {
@@ -471,7 +473,7 @@ sub _assemble_test_subs {
 		$test{canon}	= '(' . join( ' AND ' => map { $_->{canon} || '' } @tests ) . ')';
 		$test{error}	= $has_error;
 	} else {
-	
+
 	}
 	\%test;
 }
@@ -481,13 +483,13 @@ sub _final_selector {
 	my @tests	= @_;
 	my %test;
 	my $has_error	= 0;
-	$test{type}	= 
-		@tests > 1 ? 
-			shift @tests 
-		: @tests == 1 ? 
-			ref($tests[0]) eq 'HASH' ? 
-				$tests[0]->{type} 
-			: 'S' 
+	$test{type}	=
+		@tests > 1 ?
+			shift @tests
+		: @tests == 1 ?
+			ref($tests[0]) eq 'HASH' ?
+				$tests[0]->{type}
+			: 'S'
 		: 'U';
 	if ($test{type} eq 'S') {
 		$test{test}	= sub {
@@ -522,9 +524,9 @@ sub _final_selector {
 		$test{canon}	= join( ' AND ' => map { $_->{canon} || '' } @tests );
 		$test{error}	= $has_error;
 	} else {
-	
+
 	}
-	
+
 	\%test;
 }
 
@@ -555,17 +557,17 @@ sub _operators {
 		$rel		= 'err';
 		$fld_name	= qq{Bad Fieldname "$fld"};
 	}
-	
+
 	$rel			||= 'err';
 
 	my %ops = (
-	
-	'err'	=> {	
+
+	'err'	=> {
 					error	=> 1,
 					test	=> sub { return },
 					evalstr	=> qq{ 0 },
 					phrase	=> "Error: Testing for $val with $fld_name",
-					symbol	=> '',			
+					symbol	=> '',
 					fldname	=> $fld_name,
 				},
 
@@ -639,14 +641,15 @@ sub _operators {
 									$val eq 'TRUE' ? ( ($1 and $1 ne $self->{_nulls}->{$fld}) ? 1 : 0) :
 										$val eq 'FALSE' ? ( (!$1 or $1 eq $self->{_nulls}->{$fld}) ? 1 : 0) :
 										$val eq 'BLANK' ? ( (!$1 or $1 eq $self->{_nulls}->{$fld}) ? 1 : 0) :
-											$val eq 'ZERO' ? (defined($1) && !$1 && ~$1 ? 1 : 0) :
+# 											$val eq 'ZERO' ? (defined($1) && !$1 && ~$1 ? 1 : 0) :
+											$val eq 'ZERO' ? ( (defined($1) and (!$1 & length($1))) ? 1 : 0) :
 												uc($1 || '') eq uc($val)
 												}),
 					evalstr	=> qq{ \$line =~ m/^\$pre\(\$reg\)\$post\$\/s;
 									\$val eq 'TRUE' ? ( (\$1 and \$1 ne \$self->{_nulls}->{\$fld}) ? 1 : 0) :
 										\$val eq 'FALSE' ? ( (!\$1 or \$1 eq \$self->{_nulls}->{\$fld}) ? 1 : 0) :
 										\$val eq 'BLANK' ? ( (!\$1 or \$1 eq \$self->{_nulls}->{\$fld}) ? 1 : 0) :
-											\$val eq 'ZERO' ? (defined(\$1) && !\$1 && ~\$1 ? 1 : 0) :
+											\$val eq 'ZERO' ? ( defined(\$1) and (!\$1 & length(\$1)) ) ? 1 : 0) :
 												uc(\$1 || '') eq uc(\$val) },
 					phrase => join( ' ' => $fld_name,'is',$val),
 					symbol	=> 'eq',
@@ -659,15 +662,16 @@ sub _operators {
 									$val eq 'TRUE' ? ( ($1 and $1 ne $self->{_nulls}->{$fld}) ? 1 : 0) :
 										$val eq 'FALSE' ? ( (!$1 or $1 eq $self->{_nulls}->{$fld}) ? 1 : 0) :
 										$val eq 'BLANK' ? ( (!$1 or $1 eq $self->{_nulls}->{$fld}) ? 1 : 0) :
-											$val eq 'ZERO' ? (defined($1) && !$1 && ~$1 ? 1 : 0) :
-												uc($1) eq uc($val)
+# 											$val eq 'ZERO' ? (defined($1) && !$1 && ~$1 ? 1 : 0) :
+											$val eq 'ZERO' ? ( (defined($1) and (!$1 & length($1))) ? 1 : 0) :
+												uc($1 || '') eq uc($val)
 												}),
 					evalstr	=> qq{ \$line =~ m/^\$pre\(\$reg\)\$post\$\/s;
 									\$val eq 'TRUE' ? ( (\$1 and \$1 ne \$self->{_nulls}->{\$fld}) ? 1 : 0) :
 										\$val eq 'FALSE' ? ( (!\$1 or \$1 eq \$self->{_nulls}->{\$fld}) ? 1 : 0) :
 										\$val eq 'BLANK' ? ( (!\$1 or \$1 eq \$self->{_nulls}->{\$fld}) ? 1 : 0) :
-											\$val eq 'ZERO' ? (defined(\$1) && !\$1 && ~\$1 ? 1 : 0) :
-												uc(\$1) eq uc(\$val) },
+											\$val eq 'ZERO' ? ( defined(\$1) and (!\$1 & ~length(\$1))) ? 1 : 0) :
+												uc(\$1 || '') eq uc(\$val) },
 					phrase => join( ' ' => $fld_name,'is',$val),
 					symbol	=> 'eq',
 					fldname	=> $fld_name,
@@ -772,7 +776,7 @@ sub _operators {
 
 sub parens_balanced {
 	my $self		= shift;
-	my $try_where	= shift;	
+	my $try_where	= shift;
 	return 1 unless $try_where =~ /[()]/;
 	my $rps	= $try_where =~ s#\)#\)#g;
 	my $lps	= $try_where =~ s#\(#\(#g;

@@ -18,7 +18,7 @@ sub OUT {
     ## Or, subroutine[:arguments_as_string]
     ## Or, subroutine[ is arguments_as_string]    # or ... IS ...
     my $tmpl			= shift();
-    
+
 	# Three scalars here; 3rd arg of split is 2 because sep is being captured
     my ($sub, $sep, $arg)	= split(/\s*(=| is |:)\s*/i => $tmpl => 2);
 
@@ -81,7 +81,7 @@ sub OUT {
 	};
 
     push @OUT => ${ *$obj }{_mark} . ':' . $tmpl . ' (' . $out_sub_name . ')';
-		
+
 	my $out_sub	= $out_sub_name ? ( $OUT{$out_sub_name} ||= \&{ $out_sub_name } ) : sub { return };
 
 	goto &{ $out_sub };
@@ -166,10 +166,10 @@ sub db_value {
 	local *KEY	= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
 	my $fld		= shift;
 
-#	my $out		= ($KEY{$fld} or (!$KEY{$fld} && ~$KEY{$fld}==1))	? $KEY{$fld}
-#	my $out		= ($KEY{$fld} or (defined($KEY{$fld}) && ~$KEY{$fld}))	? $KEY{$fld}
-	my $out		= defined($KEY{$fld})	? $KEY{$fld}
-					: exists $KEY{_meta}{$fld}{null}				? $KEY{_meta}{$fld}{null}
+	my $out		= defined($KEY{$fld})
+					? $KEY{$fld}
+					: exists $KEY{_meta}{$fld}{null}
+					? $KEY{_meta}{$fld}{null}
 					: '';
 
 	$KEY{__DONE__}++ unless $out;
@@ -190,9 +190,24 @@ sub float {
 									|| $KEY{$fld}
 										|| $KEY{_meta}{$fld}{default}
 											|| 0;
-	$right				= (!$right && ~$right) ? 0 : $right || 2;
-
+# 	$right				= (!$right && ~$right) ? 0 : $right || 2;
+ 	$right				= (!$right & ~$right) == 1 ? 0 : $right || 2;
  	$amt =~ /^[0-9.+-]+$/ ? sprintf(qq{%.${right}f}, $amt) : $amt;
+}
+
+sub money {
+	my $obj				= shift;
+	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+	my $fld				= shift;
+	my $amt				= $KEY{"${fld}_out"}
+							|| $KEY{"${fld}.out"}
+								|| $KEY{_vals}->{$fld}
+									|| $KEY{$fld}
+										|| $KEY{_meta}{$fld}{default}
+											|| 0;
+	my $out				= $obj->dollars($amt);
+
+	$out;
 }
 
 sub labeled {
@@ -205,7 +220,8 @@ sub labeled {
 	my $val;
 	$val				= exists $KEY{_vals}->{$fld} ? $KEY{_vals}->{$fld} :
 							exists $KEY{$fld} ? $KEY{$fld} : $val;
-	if (!$val && ~$val) {
+# 	if (defined $val && !$val && ~$val) {
+	if (defined $val and (!$val & ~$val) == 1) {
 		$val	= '0'
 	} elsif (!$val) {
 		$val	= exists $KEY{_meta}{$fld}{default} ? $KEY{_meta}{$fld}{default} :
@@ -372,6 +388,7 @@ sub date {
 	my $mark		= $KEY{_mark};
 	my ($name, $date, $label, $btn_style, $script)		= split(/\s*,\s*/ => $arg);
 	return '' unless $name;
+	$date			||= '';
   	my $this_year	= $obj->this_yyyy;
 
 	my $new_date	= $KEY{_vals}{$name} || $KEY{$name} || '';
@@ -403,7 +420,7 @@ sub date {
   		$last_year		= $this_year+3;
   	}
 
-	sprintf qq{<span class="%s">%20.20s%s</span> %s  %s  %s},
+	sprintf qq{<span class="%s">%20.20s%s</span><br><span style="display:inline-block;">%s  %s  %s</span>},
 		$label_style,
 		($label eq '*'? '' : $label),
 		($label eq '*'? '' : ':'),
@@ -441,9 +458,9 @@ sub clocktime {
 
 	my ($hour, $minute, $second)	= split/:/ => $time || $KEY{$name} || '';
 
-	$hour							= defined $hour ? $hour : '';
-	$minute							= defined $minute ? $minute : '';
-	$second							= defined $second ? $second : '';
+	$hour							= defined $hour ? $hour : '00';
+	$minute							= defined $minute ? $minute : '00';
+	$second							= defined $second ? $second : '00';
 	my $ap;
 	if ($hour + $minute + $second == 0) {
 		$ap 	= '';
@@ -455,6 +472,10 @@ sub clocktime {
 	if ($hour > 12) {
 		$hour	= $hour - 12;
 	}
+
+	$hour += 0; $hour	||= '';
+# 	$minute	||= '';
+# 	$second	||= '';
 
 
 	sprintf qq{<span class="%s">%20.20s%s</span> %s:%s%s %s (%s)},
@@ -550,11 +571,14 @@ sub send_display {
 sub display_if {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
- 	my ($if,$arg,$alt)	= split /\s*,\s*/ => shift(), 3;
-	$if					||= '';
+ 	my ($fld,$arg,$alt)	= split /\s*,\s*/ => shift(), 3;
+	$fld				||= '';
+	return '' unless $fld;
 	$arg				||= '';
+	return '' unless $arg;
+	$alt				||= '';
 
-	my $condition		= $KEY{_vals}->{$if} || $KEY{$if} || '';
+	my $condition		= $KEY{_vals}->{$fld} || $KEY{$fld} || '';
 	# If not true so far, test for a field named for the display
 	$condition			||= $KEY{_vals}->{$arg} || $KEY{$arg} || '';
 
@@ -589,12 +613,13 @@ sub display_if {
 sub display_if_else {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
- 	my ($if,$arg,$alt)	= split /\s*,\s*/ => shift(), 3;
-	$if					||= '';
+ 	my ($fld,$arg,$alt)	= split /\s*,\s*/ => shift(), 3;
+	$fld				||= '';
+	return '' unless $fld;
 	$arg				||= '';
 	$alt				||= '';
 
-	my $condition		= $KEY{_vals}->{$if} || $KEY{$if} || '';
+	my $condition		= $KEY{_vals}->{$fld} || $KEY{$fld} || '';
 	# If not true so far, test for a field named for the display
 	$condition			||= $KEY{_vals}->{$arg} || $KEY{$arg} || '';
 
@@ -626,35 +651,78 @@ sub display_if_else {
 sub display_if_not {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
- 	my ($if,$arg,$alt)	= split /\s*,\s*/ => shift(), 3;
-	$if					||= '';
+ 	my ($fld,$arg,$display_name,$alt_display_name)	= split /\s*,\s*/ => shift(), 4;
+	$fld				||= '';
+	return '' unless $fld;
 	$arg				||= '';
+	$display_name		||= '';
+	$alt_display_name	||= '';
 
-	my $condition		= $KEY{_vals}->{$if} || $KEY{$if} || '';
+	my $condition		= $KEY{_vals}->{$fld} || $KEY{$fld} || '';
 	# If not true so far, test for a field named for the display
-	$condition			||= $KEY{_vals}->{$arg} || $KEY{$arg} || '';
+	$condition			||= $KEY{_vals}->{$display_name} || $KEY{$display_name} || '';
 
 	my $display			= '';
 
-	if (!$condition) {
+	if ($condition ne $arg) {
+		# $display_name may be '', to allow displays to be named _$KEY{_env} -- e.g., _htm
+		$display	=
+			$KEY{_displays}->{"${display_name}_$KEY{_env}"}
+				|| $KEY{_displays}->{"${display_name}.$KEY{_env}"}
+					|| $KEY{_displays}->{$display_name}
+						|| $obj->template("-${display_name}_$KEY{_env}")
+							|| $obj->template("-${display_name}.$KEY{_env}")
+								|| $obj->template("-$display_name")
+									|| '';
+		$display	||=
+			$KEY{_displays}->{"${alt_display_name}_$KEY{_env}"}
+				|| $KEY{_displays}->{"${alt_display_name}.$KEY{_env}"}
+					|| $KEY{_displays}->{$alt_display_name}
+						|| $obj->template("-${alt_display_name}_$KEY{_env}")
+							|| $obj->template("-${alt_display_name}.$KEY{_env}")
+								|| $obj->template("-$alt_display_name")
+									|| '';
+	}
 
-		# $arg may be '', to allow displays to be named _$KEY{_env} -- e.g., _htm
-		$display			= $KEY{_displays}->{"${arg}_$KEY{_env}"}
-								|| $KEY{_displays}->{"${arg}.$KEY{_env}"}
-									|| $KEY{_displays}->{$arg}
-										|| $obj->template("-${arg}_$KEY{_env}")
-											|| $obj->template("-${arg}.$KEY{_env}")
-												|| $obj->template("-$arg");
-		# $alt may NOT be ''
-		if (!$display && $alt) {
-			$display			= $KEY{_displays}->{"${alt}_$KEY{_env}"}
-									|| $KEY{_displays}->{"${alt}.$KEY{_env}"}
-										|| $KEY{_displays}->{$alt}
-											|| $obj->template("-${alt}_$KEY{_env}")
-												|| $obj->template("-${alt}.$KEY{_env}")
-													|| $obj->template("-$alt");
-		}
+	$KEY{__DONE__}++ unless $display;
 
+	$display
+}
+
+sub display_if_is {
+	my $obj				= shift;
+	local *KEY			= ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+ 	my ($fld,$arg,$display_name,$alt_display_name)	= split /\s*,\s*/ => shift(), 4;
+	$fld				||= '';
+	return '' unless $fld;
+	$arg				||= '';
+	$display_name		||= '';
+	$alt_display_name	||= '';
+
+	my $condition		= $KEY{_vals}->{$fld} || $KEY{$fld} || '';
+	# If not true so far, test for a field named for the display
+	$condition			||= $KEY{_vals}->{$display_name} || $KEY{$display_name} || '';
+
+	my $display			= '';
+
+	if ($condition eq $arg) {
+		# $display_name may be '', to allow displays to be named _$KEY{_env} -- e.g., _htm
+		$display	=
+			$KEY{_displays}->{"${display_name}_$KEY{_env}"}
+				|| $KEY{_displays}->{"${display_name}.$KEY{_env}"}
+					|| $KEY{_displays}->{$display_name}
+						|| $obj->template("-${display_name}_$KEY{_env}")
+							|| $obj->template("-${display_name}.$KEY{_env}")
+								|| $obj->template("-$display_name")
+									|| '';
+		$display	||=
+			$KEY{_displays}->{"${alt_display_name}_$KEY{_env}"}
+				|| $KEY{_displays}->{"${alt_display_name}.$KEY{_env}"}
+					|| $KEY{_displays}->{$alt_display_name}
+						|| $obj->template("-${alt_display_name}_$KEY{_env}")
+							|| $obj->template("-${alt_display_name}.$KEY{_env}")
+								|| $obj->template("-$alt_display_name")
+									|| '';
 	}
 
 	$KEY{__DONE__}++ unless $display;
@@ -665,11 +733,33 @@ sub display_if_not {
 sub if {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
- 	my ($if,$arg)		= split /\s*,\s*/ => shift(), 2;
-	$if					||= '';
+ 	my ($fld,$arg)		= split /\s*,\s*/ => shift(), 2;
+	$fld				||= '';
+	return '' unless $fld;
 	$arg				||= '';
 
-	my $out				= ($KEY{_vals}->{$if} || $KEY{$if}) ? $arg : '';
+	my $out				= ($KEY{_vals}->{$fld} || $KEY{$fld}) ? $arg : '';
+
+	$KEY{__DONE__}++ unless $out;
+
+	$out
+}
+
+sub if_pipe {
+	my $obj				= shift;
+	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+ 	my ($fld,$arg)		= split /\s*\|\s*/ => shift(), 2;
+	$fld				||= '';
+	return '' unless $fld;
+	$arg				||= '';
+
+	my $out				= '';
+
+	if ($KEY{_vals} and $KEY{_vals}->{$fld}) {
+		$out	= $arg;
+	} elsif ($KEY{$fld}) {
+		$out	= $arg;
+	}
 
 	$KEY{__DONE__}++ unless $out;
 
@@ -679,12 +769,13 @@ sub if {
 sub if_else {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
- 	my ($if,$arg,$alt)		= split /\s*,\s*/ => shift(), 3;
-	$if					||= '';
+ 	my ($fld,$arg,$alt)		= split /\s*,\s*/ => shift(), 3;
+	$fld				||= '';
+	return '' unless $fld;
 	$arg				= (defined $arg) ? $arg : '';
 	$alt				= (defined $alt) ? $alt : '';
 
-	my $out				= ($KEY{_vals}->{$if} || $KEY{$if}) ? $arg : $alt;
+	my $out				= ($KEY{_vals}->{$fld} || $KEY{$fld}) ? $arg : $alt;
 
 	$KEY{__DONE__}++ unless $out;
 
@@ -694,12 +785,21 @@ sub if_else {
 sub if_else_pipe {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	my ($if,$arg,$alt)		= split /\s*\|\s*/ => shift(), 3;
-	$if					||= '';
+	my ($fld,$arg,$alt)		= split /\s*\|\s*/ => shift(), 3;
+	$fld				||= '';
+	return '' unless $fld;
 	$arg				= (defined $arg) ? $arg : '';
 	$alt				= (defined $alt) ? $alt : '';
 
-	my $out				= $KEY{_vals}->{$if} ? $arg : $KEY{$if} ? $arg : $alt;
+	my $out				= '';
+
+	if ($KEY{_vals} and $KEY{_vals}->{$fld}) {
+		$out	= $arg;
+	} elsif ($KEY{$fld}) {
+		$out	= $arg;
+	} else {
+		$out	= $alt;
+	}
 
 	$KEY{__DONE__}++ unless $out;
 
@@ -709,13 +809,14 @@ sub if_else_pipe {
 sub if_value_else {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
- 	my ($if,$value,$arg,$alt)		= split /\s*,\s*/ => shift(), 4;
-	$if					||= '';
+ 	my ($fld,$value,$arg,$alt)		= split /\s*,\s*/ => shift(), 4;
+	$fld				||= '';
+	return '' unless $fld;
 	$arg				= (defined $arg) ? $arg : '';
 	$alt				= (defined $alt) ? $alt : '';
 
-	my $out				= ($KEY{_vals}->{$if} && $KEY{_vals}->{$if} eq $value) ? $arg :
-							($KEY{$if} && $KEY{$if} eq $value) ? $arg : $alt;
+	my $out				= ($KEY{_vals}->{$fld} && $KEY{_vals}->{$fld} eq $value) ? $arg :
+							($KEY{$fld} && $KEY{$fld} eq $value) ? $arg : $alt;
 
 	$KEY{__DONE__}++ unless $out;
 
@@ -725,11 +826,12 @@ sub if_value_else {
 sub unless {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
- 	my ($if,$arg)		= split /\s*,\s*/ => shift(), 2;
-	$if					||= '';
+ 	my ($fld,$arg)		= split /\s*,\s*/ => shift(), 2;
+	$fld				||= '';
+	return '' unless $fld;
 	$arg				||= '';
 
-	my $out				= ($KEY{_vals}->{$if} || $KEY{$if}) ? '' : $arg;
+	my $out				= ($KEY{_vals}->{$fld} || $KEY{$fld}) ? '' : $arg;
 
 	$KEY{__DONE__}++ unless $out;
 
@@ -965,7 +1067,7 @@ sub hdr {
 # 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
 # 	my $arg				= shift;
 # 	$obj->out_header( split(/\s*,\s*/ => $KEY{$arg} || $arg || '' ) ) || "\n";
-	
+
 	goto &res_hdr;
 }
 
@@ -992,18 +1094,18 @@ sub res_hdr {
 	$post				||= '';
 	$more				||= '';
 
-	my %info		= ( 
-		_obj	=> $obj, 
+	my %info		= (
+		_obj	=> $obj,
 		_env	=> $env,
-		mark	=> $mark, 
-		type	=> $type, 
+		mark	=> $mark,
+		type	=> $type,
 		rsrc	=> $resource,
 		charset => $charset,
 		post	=> $post,
 	 );
 
 	######## %info is now set ########
-	
+
 	DISPATCH: {
 		my $sub	= 	defined &{'main::' . '_' . $info{type} . '_hdr_' . $info{_env} } ?
 						\&{'main::' . '_' . $info{type} . '_hdr_' . $info{_env} } :
@@ -1259,7 +1361,9 @@ sub bgcolor {
 	my $arg				= shift;
 	my ($color,$default)= split /\s*,\s*/ => $arg;
 	my $bgc				= $KEY{"${color}_out"} || $KEY{"${color}.out"} || $KEY{$color} || $color || '';
-	$default 			= $default ? $default =~ /^\s*(\#[a-fA-F0-9]{6})\s*$/i ? $1
+	$default 			= $default ? $default =~ m|^\s*(\#[a-fA-F0-9]{6})\s*$|i ? $1
+							: $default =~ m|^\s*(\#0000000)\s*$| ? $1
+							: $default =~ m|^\s*(\#0000)\s*$| ? $1
 							: '#a9a9a9'
 							: '#FFFFFF';
 
@@ -1302,27 +1406,40 @@ sub input {
 	my $arg				= shift;
 	my ($fld,$value,$size,$max)	= split /\s*,\s*/ => $arg;
 	return '' unless $fld;
-	$value		||= '';
+	$value		||= $KEY{$fld} || $KEY{_default}->{$fld} || '';
 	my $out				= "";
 	if ($KEY{_env} =~ /htm/i) {
 		$size		||= '24';
 		$max		||= '40';
 		$out		= sprintf qq{<input type="text" name="%s" value="%s" size="%s" maxlength="%s">},
-			$fld, $value, $size, $max; 
+			$fld, $value, $size, $max;
 	} elsif ($KEY{_env} =~ /term/i) {
 		print "Please provide $fld: \n";
 		$out		= <STDIN>;
-	} 
-# 	return $out || "Pleaase provide $fld: \n";
+	}
+# 	return $out || "Please provide $fld: \n";
 	return $out;
 }
 
-sub Xhidden {
-	my $obj				= shift;
-	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
-	my $arg				= shift;
-	sprintf qq{<input type=hidden name='%s' value="%s">},
-		split(/\s*,\s*/ => $KEY{$arg} || $arg )
+sub input_term {
+	my $obj		= shift();
+	local *KEY	= $obj->invert();
+	my $arg		= shift;
+	my ($fld,$val,$def,$lbl,$echo,$note)	= split(/\s*,\s*/ => $arg, 6 );
+	return '' unless $fld;
+	$def	||= '';
+	$val	= $val || $KEY{$fld} || $KEY{_vals}->{$fld} || $def || '';
+	$lbl	= defined( $KEY{_label} ) ? ($KEY{_label}->{$fld} || $fld) : $fld;
+	$echo	||= 0;
+	$note	= $note ? "$note\n " : '';
+	my $verb	= $val ? 'Confirm' : 'Provide';
+	print "$note Please $verb $lbl [$val]:";
+	my $input = <STDIN> || '';
+	chomp $input;
+	$input ||= $val;
+	$obj->charge($fld => $input);
+	print "$input\n" if $echo;
+ 	return $input || "";
 }
 
 sub hidden {
@@ -1333,13 +1450,12 @@ sub hidden {
 	my ($fld,$value)	= split(/\s*,\s*/ => $arg );
 	return "" unless $fld;
 	$value ||= $KEY{_vals}->{$fld} || $KEY{$fld} || '';
-	sprintf qq{<input type=hidden name='%s' value="%s">}, $fld, $value;
+	sprintf qq{<input type=hidden name='%s' id='%s' value="%s">}, $fld, $fld, $value;
 }
-
 
 sub hidden_marked {
 	my $obj				= shift;
-	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+	local *KEY			= ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
 	my $arg				= shift;
 	my $mark			= $KEY{_mark};
 	my ($fld,$value)	= split(/\s*,\s*/ => $arg );
@@ -1372,7 +1488,7 @@ sub img {
 	sprintf qq{<img src="%s" alt="%s">}, $file, $title || ''
 }
 
-sub collect {
+sub Xcollect {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
 	my $arg				= shift;
@@ -1390,6 +1506,28 @@ sub collect {
 		push @fields => $n
 	}
 	join "\n\n" => map { input(\*KEY, $_, $mark) } @fields
+}
+
+sub collect {
+	my $obj				= shift;
+	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+	my $arg				= shift;
+	my $mark			= $KEY{_mark};
+	# COLLECT=all  COLLECT=first_name, last_name, type1, type 2
+	my @fields;
+	my $RE				= $KEY{_type_RE} || '';
+	for my $n (split(/\s*,\s*/ => $KEY{$arg} || $arg ) ) {
+		if ($n =~ /^\s*all\s*$/i) {
+			push @fields => @{ $KEY{_flds} }
+		} elsif ($RE and $n =~ /^\s*$RE{1}\s*$/) {
+			push @fields => grep { $KEY{_meta}{$_}{type} eq $n } @{ $KEY{_flds} }
+		} else {
+			push @fields => $n
+		}
+	}
+  	join "\n\n" => map { input($obj, $_, $mark) } @fields
+# 	join "\n" => map { input_term($obj, $_) } @fields
+#	join "\n\n" => map { $obj->process(qq{input=$_}) } @fields
 }
 
 sub collect_hidden {
@@ -1687,9 +1825,9 @@ sub input_or_popX {
 								|| '*';
 		}
 
-		my $prefix		= $plain ? '' 
-							: sprintf(qq{<span class="%s">%24.24s:</span><br> }, 
-								$label_style, 
+		my $prefix		= $plain ? ''
+							: sprintf(qq{<span class="%s">%24.24s:</span><br> },
+								$label_style,
 								"$req_pref$fld_label");
 
 		$output			= $prefix . $obj->pop_up3(
@@ -1697,8 +1835,8 @@ sub input_or_popX {
 			$KEY{_lists}->{$listname} || $KEY{$listname.'_in'},
 			$KEY{_lists}->{$labellistname} || $KEY{$labellistname.'_in'} || '',
 			$default,
-			'', 
-			0, 
+			'',
+			0,
 			$style
 		);
 		# pop_up3(name, option_list_ref, label_list_ref, initial, initial_label, go, style)
@@ -1730,7 +1868,7 @@ sub pick {
 	my @initial_labels	= @{ shift() };
 	my %init_labels;
 	if (@initials) {
-		@initials	= map { /([^\`^]+)/ ? () : $1 } @initials;
+		@initials	= map { /([^\`^]+)/ ? $1 : () } @initials;
 		@initial_labels or @initial_labels = @initials;
 
 		@init_labels{@initials}	= map { $initial_labels[$_] || $initials[$_] } 0..$#initials;
@@ -1745,7 +1883,6 @@ sub pick {
 		sprintf qq{<option value="%s"%s>%${width}.${width}s</option>\n},
 		 $_, (exists $init_labels{$_} and delete $init_labels{$_} ? ' selected' : ''), $labels{$_};
 	} @options;
-
 	unless (@initials) {
 		$pop 			= sprintf qq{<option value="%s" selected>%27s</option>\n%s},
 					'', ' -&gt; Select One' . ($not_multi ? '' : ' or More') . ' Below: ', $pop;
@@ -1756,7 +1893,7 @@ sub pick {
 			 $_, ' selected', $init_labels{$_}) : ()
 		} @initials) . $pop
 	}
-	qq{<select name="$name" size="$size"} . ($not_multi ? '' : 'multiple') . qq{>\n${pop}</select>};
+	qq{<select name="$name" size="$size"} . ($not_multi ? '' : ' multiple') . qq{>\n${pop}</select>};
 }
 
 
