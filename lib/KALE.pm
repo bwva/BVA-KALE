@@ -1,7 +1,7 @@
 package BVA::KALE;
 
 $BVA::KALE::VERSION      = "3.08.02b"; # No-vars
-$BVA::KALE::VERSION_DATE = '2019-12-02';
+$BVA::KALE::VERSION_DATE = '2019-12-05';
 
 use strict;
 use warnings;
@@ -27,7 +27,7 @@ Version 3.08.01
 
 =head1 SYNOPSIS
 
-::KALE provides methods and structures for creating dynamic user interfaces.
+KALE provides methods and structures for creating dynamic user interfaces.
 
     use BVA::KALE;
 
@@ -89,7 +89,7 @@ sub init {
 
 	$::KEY{_mark} ||=
 		$::KEY{mark} ? delete $::KEY{mark}
-	  : '::KEY';
+	  : 'KEY';
 	$::KEY{_ui_mark} = $::KEY{_mark};
 
 	$::KEY{_sub} ||= \&OUTPUT;
@@ -197,7 +197,7 @@ sub new {
 	  : $properties{_file} ? $properties{_file}
 	  : '';
 	$properties{_file} &&=
-	  $properties{_file} =~ m{^\s*([^`<>]+)\s*$} ? $1 : '-';
+	  $properties{_file} =~ m{\A\s*([^`<>,]+)\s*\z} ? $1 : '-';
 	$properties{_file} ||= '-';
 
 	$properties{_owner} ||= $properties{_mark};
@@ -305,7 +305,7 @@ sub generator ($) {
 
 ## Objects: returns a list of all current UI objects, or
 ## a list of the objects specified in the args with
-## valid ::KEY marks ($::KEY{_mark} -- '::KEY').
+## valid KEY marks ($::KEY{_mark} -- 'KEY').
 sub objects ($;@) {
 	my ( $self, @object_names ) = @_;
 	local *::KEY = invert($self);
@@ -330,7 +330,7 @@ sub object_marks_in_use {
 }
 
 ## Object: returns a UI object specified by a single arg
-## with a valid ::KEY marks ($::KEY{_mark} -- '::KEY').
+## with a valid KEY marks ($::KEY{_mark} -- 'KEY').
 sub object ($;$) {
 	my ( $self, $object_name ) = @_;
 	local *::KEY = invert($self);
@@ -655,8 +655,8 @@ sub replace ($;@) {
 ## The same array is returned concatenated as a string in scalar context.
 ## Output may be () or ''.
 ## Usage: $obj->process(qq{INPUT=$fld,$value,r,,,-1})
-## Compare to $obj->replace(qq{<!--::KEY:INPUT=$fld,$value,r,,,-1-->})
-## where _start is '<!--', _mark is '::KEY', _end is '-->.
+## Compare to $obj->replace(qq{<!--KEY:INPUT=$fld,$value,r,,,-1-->})
+## where _start is '<!--', _mark is 'KEY', _end is '-->.
 sub process {
 	my ( $self, @strings ) = (@_);
 	local *::KEY = $self->invert();    # invert($self);
@@ -1795,15 +1795,15 @@ sub num_list_items ($;@) {
 	return scalar @list;
 }
 
-## Store: Same as replace, plus all output is written to the filehandle ::KEY.
+## Store: Same as replace, plus all output is written to the filehandle KEY.
 ##		If no file was specified in the initialization of the object,
 ##		or attached with attach_file() after initialization,
 ##		store() will write to a temporary file if called.
 ##		retrieve() returns the contents of the file, and empties the file.
 ##		recall() returns the contents of the file.
-##		File may be written to (appending) directly by printing to the filehandle ::KEY,
+##		File may be written to (appending) directly by printing to the filehandle KEY,
 ##		but it's better to use store().
-##		File may be read directly from the filehandle ::KEY using <::KEY>, but
+##		File may be read directly from the filehandle KEY using <KEY>, but
 ##		it's better to use recall().
 
 sub store ($;@) {
@@ -1841,16 +1841,16 @@ sub store ($;@) {
 	return $output;
 }
 
-# store_file Same as replace, plus all output is written to the filehandle ::KEY,
+# store_file Same as replace, plus all output is written to the filehandle KEY,
 ## 		overwriting anything already in the file.
 ##		If no file was specified in the initialization of the object,
 ##		or attached with attach_file() after initialization,
 ##		store() will write to a temporary file if called.
 ##		retrieve() returns the contents of the file, and empties the file.
 ##		recall() returns the contents of the file.
-##		File may be written to directly by printing to the filehandle ::KEY,
+##		File may be written to directly by printing to the filehandle KEY,
 ##		but it's better to use store_file().
-##		File may be read directly from the filehandle ::KEY using <::KEY>, but
+##		File may be read directly from the filehandle KEY using <KEY>, but
 ##		it's better to use recall().
 
 sub store_file ($;@) {
@@ -1896,7 +1896,7 @@ sub store_file ($;@) {
 ## field names; otherwise all fields are used. If a field name is not
 ## in the %::KEY hash, an empty string is stored. Only stores main data
 ## with scalar values or array/hash references; skips meta-data (fields starting with '_'), fields that
-## contain non-ARRAY/HASH references, and the object's ::KEY field (holding marked input).
+## contain non-ARRAY/HASH references, and the object's KEY field (holding marked input).
 ## Does not process data, except to provide '' for empty non-zero field values.
 ## Returns a hash of the stored values.
 sub store_data ($;@) {
@@ -1949,7 +1949,7 @@ sub store_data ($;@) {
 ## in the %::KEY hash, an empty string is stored. Only stores main data
 ## with scalar values or array/hash references; skips meta-data (fields starting with '_')
 ## EXCEPT for the _meta field (2017-08-08), fields that
-## contain non-ARRAY/HASH references, and the object's ::KEY field (holding marked input).
+## contain non-ARRAY/HASH references, and the object's KEY field (holding marked input).
 ## Does not process data, except to provide '' for empty/false non-zero field values.
 ## Returns a hash of the stored values.
 sub store_json ($;@) {
@@ -1995,7 +1995,7 @@ sub store_json ($;@) {
 ## field names; otherwise all fields are used. If a field name is not
 ## in the %::KEY hash, an empty string is stored. Only stores meta data
 ## (fields starting with '_'); skips fields that contain CODE or GLOB references,
-## and the object's ::KEY field (holding marked input).
+## and the object's KEY field (holding marked input).
 ## Does not process data, except to provide '' for empty non-zero field values.
 ## Returns a hash of the stored values.
 sub store_meta ($;@) {
@@ -2093,6 +2093,118 @@ sub restore_data {
 	  ? map { $_ => $::KEY{$_} || '' } keys %_KEYS
 	  : { map { $_ => $::KEY{$_} || '' } keys %_KEYS };
 }
+
+## recall_data_records: Reads back any data stored in the attached file.
+## Data read back is eval()-ed on the assumption that it is a
+## serialized hash named %_KEY; anything else in the file is ignored, EXCEPT
+## that any statement must eval() OK, including 'strict' requirements.
+## The hash is then added as a hashref copy to an array.
+## Allows multiple serialized hashes to be read in, in the order
+## they were stored, resulting in a set of records in the array,
+## with each successive hash read back from the attached file preserved.
+## Does not process data; does not alter the file.
+## Returns the array of the restored values, either as an array of
+## hashrefs, or as a text block of tab-delimited columns separated by newlines.
+sub recall_data_records {
+	my $arg1 = shift;
+	local *::KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
+
+	local $/ = "\n#=\n";
+
+	my $old_tell;
+	if ( defined *::KEY{IO} and *::KEY{IO}->opened() ) {
+		$old_tell = tell ::KEY;
+	}
+	elsif ( !$::KEY{_file} ) {
+		return;
+	}
+	elsif ( $::KEY{_file} eq '-' ) {
+		return;
+	}
+	elsif ( $::KEY{_file} eq '^' ) {
+		$::KEY{_vfile} ||= '';
+		open ::KEY, "+>>", \$::KEY{_vfile} or return;
+		$old_tell = tell ::KEY;
+	}
+	else {
+		open ::KEY, "+>>", "$::KEY{_file}" or return;
+		$old_tell = tell ::KEY;
+	}
+	seek( ::KEY, 0, 0 );
+
+	my %_KEY;
+	my %_KEYS;
+	my @_KEYS;
+
+	while (<::KEY>) {
+		next unless /^([^`]+)$/;
+		my $d = $1;
+		next unless eval $d;
+		push @_KEYS => {%_KEY};
+ 		$_KEYS{$_}++ for keys %_KEY;
+	}
+	seek ::KEY, $old_tell, 0;
+	close ::KEY unless $::KEY{_file_keep_open};
+
+	my @header	= sort keys %_KEYS;
+	wantarray
+	  ? @_KEYS
+	  : join "\n" => join("\t" => @header),
+	  	map { my $k = $_; join "\t" => map { $k->{$_} || '' } @header } @_KEYS ;
+}
+
+## retrieve_data_records:
+## Same as recall_data_records except that it empties the file
+sub retrieve_data_records {
+	my $arg1 = shift;
+	local *::KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
+
+	local $/ = "\n#=\n";
+
+	my $old_tell;
+	if ( defined *::KEY{IO} and *::KEY{IO}->opened() ) {
+		$old_tell = tell ::KEY;
+	}
+	elsif ( !$::KEY{_file} ) {
+		return;
+	}
+	elsif ( $::KEY{_file} eq '-' ) {
+		return;
+	}
+	elsif ( $::KEY{_file} eq '^' ) {
+		$::KEY{_vfile} ||= '';
+		open ::KEY, "+>>", \$::KEY{_vfile} or return;
+		$old_tell = tell ::KEY;
+	}
+	else {
+		open ::KEY, "+>>", "$::KEY{_file}" or return;
+		$old_tell = tell ::KEY;
+	}
+	seek( ::KEY, 0, 0 );
+
+	my %_KEY;
+	my %_KEYS;
+	my @_KEYS;
+
+	while (<::KEY>) {
+		next unless /^([^`]+)$/;
+		my $d = $1;
+		next unless eval $d;
+		push @_KEYS => {%_KEY};
+ 		$_KEYS{$_}++ for keys %_KEY;
+	}
+
+	truncate( ::KEY, 0 );
+	close ::KEY unless $::KEY{_file_keep_open};
+
+	my @header	= sort keys %_KEYS;
+	wantarray
+	  ? @_KEYS
+	  : join "\n" => join("\t" => @header),
+	  	map { my $k = $_; join "\t" => map { $k->{$_} || '' } @header } @_KEYS ;
+}
+
+
 
 ## Restore json: Reads back json-formatted data stored in the attached file.
 ## Data read back is json_decode-d into a hash assuming that it is valid json .
@@ -2690,8 +2802,8 @@ sub charge_auto ($;@) {
 ## A calculation stored in a field named without the starting hyphen will put its
 ## result in a field of the same name with '_out' appended, replacing any value previously there.
 ## If the value of the field is not a coderef, the value itself is returned.
-## Coderefs generally should only alter values in fields to which they return their results;
-## however, .
+## Calculations only alter values in fields to which the calculating fields return their results;
+## however, they may use values in other fields to obtain those results.
 ## The coderef is passed an anonymous UI object charged with data from %::KEY.
 ## Circular references:
 ## Forced context:
@@ -3005,7 +3117,7 @@ sub charge_valid ($;@) {
 
 ## Charge_marked:  safely adds marked input data to %::KEY, and returns updated ui object.
 ## Similar to charge, but only accepts data from fields whose
-## names start with 'MARK:' or 'MARK_', or end with '_MARK' where MARK is $::KEY{_mark} (which is '::KEY').
+## names start with 'MARK:' or 'MARK_', or end with '_MARK' where MARK is $::KEY{_mark} (which is 'KEY').
 ## If no argument is given, inserts marked input data stored in $::KEY{$::KEY{_mark}} (same as $::KEY{_vals}).
 ## Over-writes existing fields with same names (with the mark stripped off).
 sub charge_marked ($;@) {
@@ -5101,7 +5213,7 @@ Bruce W Van Allen, C<< <bva at cruzio.com> >>
 =head1 BUGS
 
 Please report any bugs or feature requests to C<bug-bva-kale at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=BVA-::KALE>.  I will be notified, and then you'll
+the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=BVA-KALE>.  I will be notified, and then you'll
 automatically be notified of progress on your bug as I make changes.
 
 
@@ -5120,19 +5232,19 @@ You can also look for information at:
 
 =item * RT: CPAN's request tracker (report bugs here)
 
-L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=BVA-::KALE>
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=BVA-KALE>
 
 =item * AnnoCPAN: Annotated CPAN documentation
 
-L<http://annocpan.org/dist/BVA-::KALE>
+L<http://annocpan.org/dist/BVA-KALE>
 
 =item * CPAN Ratings
 
-L<http://cpanratings.perl.org/d/BVA-::KALE>
+L<http://cpanratings.perl.org/d/BVA-KALE>
 
 =item * Search CPAN
 
-L<http://search.cpan.org/dist/BVA-::KALE/>
+L<http://search.cpan.org/dist/BVA-KALE/>
 
 =back
 
