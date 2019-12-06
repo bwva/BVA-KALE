@@ -198,7 +198,7 @@ sub new {
 	  : $properties{_file} ? $properties{_file}
 	  : '';
 	$properties{_file} &&=
-	  $properties{_file} =~ m{^\s*([^`<>]+)\s*$} ? $1 : '-';
+	  $properties{_file} =~ m{\A\s*([^`<>,]+)\s*\z} ? $1 : '-';
 	$properties{_file} ||= '-';
 
 	$properties{_owner} ||= $properties{_mark};
@@ -3846,7 +3846,7 @@ sub get_templates {
 	ref($self) eq __PACKAGE__ or unshift @_, $self;
 
 	my $display_dir = shift;
-	-d $display_dir or return '_NODIR_';    # ???
+	-d $display_dir or return '_NODIR_';    #
 	my $displays_only = shift;
 	my %templates;
 	for my $file ( glob "$display_dir/*.tmpl" ) {
