@@ -216,7 +216,8 @@ sub new {
 	else {
 		$properties{_match_str} =
 qr{(?s:((\Q$properties{_start}$properties{_mark}\E)[: -]((.(?!\2))*?)\Q$properties{_end}\E))};
-		$properties{_default_tmpl} =
+# 		$properties{_default_tmpl} =
+		$properties{_default_tmpl} ||=   # 2019-12-21
 		  qq{$properties{_start}$properties{_mark}:DATA=_mark$properties{_end}};
 	}
 
@@ -1194,7 +1195,8 @@ sub template ($;@) {
 
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
 
-	my $tmpl = '';
+# 	my $tmpl = '';
+	my $tmpl = $KEY || $KEY{_default_tmpl}; # 2019-12-21
 	my $tmpl_name = shift || '';
 	my ( $get_tmpl_file, $template_name, $append ) =
 	  $tmpl_name =~ /^(-)?([a-zA-Z_][\w -]*?)(\+)?\s*$/;
@@ -3846,7 +3848,7 @@ sub get_templates {
 	ref($self) eq __PACKAGE__ or unshift @_, $self;
 
 	my $display_dir = shift;
-	-d $display_dir or return '_NODIR_';    #
+	-d $display_dir or return '_NODIR_';    # ??
 	my $displays_only = shift;
 	my %templates;
 	for my $file ( glob "$display_dir/*.tmpl" ) {
