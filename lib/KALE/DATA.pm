@@ -11,7 +11,7 @@ use Fcntl qw{:DEFAULT :flock};
 
 use parent qw{BVA::KALE::DATA::WHERE BVA::KALE::DATA::META BVA::KALE::DATA::PROC BVA::KALE::DATA::CALC};
 
-## Create a database handler
+## Create a database interface with default config
 sub init {
 	my $class	= shift;
 	my $args	= shift;
@@ -86,8 +86,8 @@ sub connect {
 		%args = @_;
 	}
 
-	## Make a statement handler object,
-	## starting with a clone of the database handler
+	## Make a database handler object,
+	## starting with a clone of the database interface config
 	my $obj				= { %$self };
 
 	## get filename from file= or db= arg
@@ -105,10 +105,13 @@ sub connect {
 	$obj->{_fsize} > 0
 		or do { $self->errAdd(qq/$0: Connect failed on $obj->{_file}: File is empty.\n/), return};
 
-	$obj->{_fsize_note}	= reverse int $obj->{_fsize}/1024;
-	$obj->{_fsize_note}	=~ s/(\d\d\d)(?=\d)(?!\d*\.)/$1,/g;
-	$obj->{_fsize_note}	= reverse $obj->{_fsize_note};
-	$obj->{_fsize_note}	= '<1' if (!$obj->{_fsize_note} and $obj->{_fsize} > 0);
+	$obj->{_fsize_note}	= do {
+		my $note	= reverse int $obj->{_fsize}/1024;
+		$note		=~ s/(\d\d\d)(?=\d)(?!\d*\.)/$1,/g;
+		$note		= reverse $note;
+		$note		= '<1' if (!$note and $obj->{_fsize} > 0);
+		$note;
+	};
 
 	## Separators
 	$obj->{_input_sep}	= $args{input_sep}			||= $obj->{_input_sep};
@@ -1521,7 +1524,7 @@ sub do_insert {
 		push @_ => '' if @_ % 2;
 		%exec_params	= @_;
 	}
-	
+
 	# Now add VALUES, if any, from the execute call
 	if ( $exec_params{VALUES} ) {
 		my %VALS;
@@ -3746,7 +3749,7 @@ sub db_out_struct {
 				$type		= $3 || $self->{_types}->{$fld} || $self->{_def_type};
 				$size		= $4 || $self->{_sizes}->{$fld} || $self->{_def_size};
 				$def		= $5 || (defined($5) and (!$5 && length($5))) ? 0 : $self->{_defaults}->{$fld} || '';
-				
+
 				$fmt		= "$type:$size";
 				if (exists $hd_nums{$fld}) {
 					$col		= $hd_nums{$fld};
@@ -4104,7 +4107,7 @@ sub make_db_msg {
 			return "Mute off: " . ($add_msg || $time);
 		} elsif ($command =~ /^print/i) {
 			$msg_holder .=  $add_msg || '' unless $mute_lock;
-			my $print_out	= qq|$default_msg $msg_holder|;
+			my $print_out	= join ' ' => grep { $_ } $default_msg, $msg_holder;
 			$msg_holder = ' ' if $print_flush;
 			return $print_out;
 		} elsif ($command =~ /^add/i) {
@@ -4112,7 +4115,7 @@ sub make_db_msg {
 			return $add_msg;
 		} elsif ($command =~ /^log/i) {
 			$msg_holder .=  qq|\n$time: $add_msg| unless $mute_lock;
-			return qq|\n$time $default_msg $add_msg|;
+			return "\n" . join ' ' => grep { $_ } $time, $default_msg, $add_msg;
 		} else {
 			$msg_holder = $in unless $mute_lock;
 			return $in;

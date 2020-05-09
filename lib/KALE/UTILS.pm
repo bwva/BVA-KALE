@@ -31,6 +31,16 @@ sub string_list {
 	}
 }
 
+sub commify {
+	my $self	= shift;
+	my $num		= shift || 0;
+	my $c_num	= reverse int $num;
+	$c_num		=~ s/(\d\d\d)(?=\d)(?!\d*\.)/$1,/g;
+	$c_num		= reverse $c_num;
+	$c_num		= '<1' if (!$c_num and $num > 0);
+	$c_num;
+}
+
 # format a number as dollar currency
 sub dollars {
 	my $self			= shift;
