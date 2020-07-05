@@ -23,7 +23,7 @@ BVA::KALE - Extensible User Interface!
 
 =head1 VERSION
 
-Version 3.08.01
+Version 3.09.01
 
 =cut
 
