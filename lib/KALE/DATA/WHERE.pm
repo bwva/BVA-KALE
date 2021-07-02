@@ -110,7 +110,7 @@ sub make_selector {
 }
 
 # =~ m/^(.*?) ?([:=><~!^#*@]{1,2}) ?(.*)$/s
-# This works in Perl 5.8.x. 5.10 could use (?2) instead of (??{ $np })
+# This works in Perl 5.8.x. 5.10+ could use (?2) instead of (??{ $np })
 sub _RE_parser {
 	my $self	= shift;
 	my @queue	= @_;

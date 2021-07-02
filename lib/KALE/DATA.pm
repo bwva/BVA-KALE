@@ -311,7 +311,7 @@ sub connect {
 	}
 
 	## Indexing of columns in struct
-	$obj->{_id_col}					= $args{id_col} || $obj->{_id_col} || "0E0"; # '0 but true';
+	$obj->{_id_col}	= $args{id_col} || $obj->{_id_col} || "0E0"; # '0 but true';
 
 	unless ( $struct{keys}->[$obj->{_id_col}] == 1) {
 		for my $col (0..$#{$struct{keys}}) {
@@ -549,8 +549,17 @@ sub prepare {
 	if (ref($sttmt)) {
 		$prep_sttmt	= $sttmt;
 	} else {
-		my $splitters		=
-			'SELECT|UPDATE|INSERT|DELETE|COUNT|BROWSE|INDEXID|INDEX|CREATE|IMPORT|FIELDS|SET|RECORD|VALUES|INTO|TO|FROM|WHERE|ORDER|WITH|LIMIT|PROC|ACTION|WHEN|ALIAS';
+		my @action_tokens	= qw/
+			SELECT UPDATE INSERT DELETE COUNT BROWSE
+			INDEXID INDEX CREATE IMPORT ACTION
+		/;   ## MARK DESTROY UPSERT DROP
+		my @sttmt_tokens	= qw/
+			FROM WHERE ORDER INTO TO
+			FIELDS SET RECORD VALUES
+			WITH LIMIT PROC WHEN ALIAS
+			BREAK NEXT
+		/;
+		my $splitters		= join '|' =>  (@action_tokens, @sttmt_tokens);
 		chomp $sttmt;
 		my @sttmt_items		= split /\s*\b($splitters)\b\s*/, $sttmt;  # *** 2006-08-30 \s*\b($splitters)\b\s*
 		shift @sttmt_items;
@@ -562,8 +571,13 @@ sub prepare {
 			$prep_sttmt->{$_} =~ s/^\s*|\s*$//gs;
 		}
 
-		for ( qw/SELECT UPDATE INSERT DELETE COUNT BROWSE INDEXID INDEX CREATE IMPORT ACTION/ ) {  # MARK DESTROY
-			if (exists $prep_sttmt->{$_}) { $prep_sttmt->{ACTION} = $_ =~ /^ACTION$/ ?  $prep_sttmt->{ACTION} : lc( $_ ); last }
+		for ( @action_tokens ) {
+			if (exists $prep_sttmt->{$_}) {
+				$prep_sttmt->{ACTION} = $_ =~ /^ACTION$/ ?
+					$prep_sttmt->{ACTION}
+					: lc( $_ );
+				last;
+			}
 		}
 	}
 
@@ -591,16 +605,17 @@ sub prepare {
 
 	my %extra			= @_;
 
-# 	# here's a PROC added to %extra:
-# 	my $db	= $sth->prepare(qq{
-# 		SELECT * WHERE all TO db PROC zero_pad 12, range;
-# 	},
-# 		zero_pad => sub {
-# 			my $self	= $_[0];
-# 			...
-# 		},
-# 		)->execute()
-# 	or die "Database statement execution failure: " . $dbh->messages('err');
+	# 	# here's a PROC added to %extra:
+	# 	my $sth	= $dbh->prepare(qq{
+	# 		SELECT * WHERE all TO db PROC zero_pad 12, range;
+	# 	},
+	# 		zero_pad => sub {
+	# 			my $self	= $_[0];
+	# 			...
+	# 		},
+	# 	);
+	#	$sth->execute()
+	# 		or die "Database statement execution failure: " . $dbh->messages('err');
 
 	# PROC parse to separate procedures w/ args;
 	# Look up procedures in %extras and in the BVA::KALE::DATA::PROC library;
@@ -620,8 +635,9 @@ sub prepare {
 			$args				||= '';
 			my $process;
 			if ($proc) {
-				if ($proc =~ s/^([a-zA-Z]+):(.*)$/$2/) {
+				if ($proc =~ /^([a-zA-Z]+):(.*)$/) {
 					push @{ $self->{_tracking} } => $1;
+					$proc	= $2;
 				}
 				if (exists $extra{$proc}) {
 					$process						= $extra{$proc};
@@ -645,16 +661,16 @@ sub prepare {
 	goto &{ 'prep_' . $prep_sttmt->{ACTION} };
 }
 
-# Deprecated: in old versions takes hash instead of string SQL statement. prepare() now does that.
+# Deprecated: in old versions takes hash
+# instead of string SQL statement.
+# prepare() now does that.
 sub prepstmt {
 	goto &prepare;
 }
 
-
 sub execute {
 	goto &{'do_' . $_[0]->{ACTION} };
 }
-
 
 # Cursor from SELECT
 sub cursor {
@@ -690,7 +706,11 @@ sub has_iterator {
 sub results {
 	my $self	= shift;
 
-	$self->{_results} = { map { exists $self->{$_} ? ($_ => $self->{$_}) : () } $self->result_tracking() };
+	$self->{_results} = { map {
+		exists $self->{$_} ?
+		($_ => $self->{$_})
+		: ()
+	} $self->result_tracking() };
 
 	my $which_result	= shift || '';
 
@@ -760,8 +780,6 @@ sub cursor_reset {
 
 	return $self->iterator('reset');
 }
-
-
 
 
 # SELECT
@@ -1070,7 +1088,6 @@ sub prep_delete {
 	} ref($statement{FROM}) ? @{ $statement{FROM} } : split( /\s*,\s*/, ($statement{FROM} || 'me')) ];
 
 	# WHERE				# fld(=|>|<|!|==|>>|<<|!!|~|!~|^|_|`|*|!*)val
-#	$self->make_selector($statement{WHERE});
   	$statement{selector}	= $self->make_selector($statement{WHERE});
 
 	bless { %{ $self }, %statement }, ref($self) || $self
@@ -1089,7 +1106,6 @@ sub prep_count {
 	} ref($statement{FROM}) ? @{ $statement{FROM} } : split( /\s*,\s*/, ($statement{FROM} || 'me')) ];
 
 	# WHERE				# fld(=|>|<|!|==|>>|<<|!!|~|!~|^|_|`|*|!*)val
-#	$self->make_selector($statement{WHERE});
   	$statement{selector}	= $self->make_selector($statement{WHERE});
 
 	bless { %{ $self }, %statement }, ref($self) || $self
@@ -1115,7 +1131,6 @@ sub prep_browse {
 	} ref($statement{FROM}) ? @{ $statement{FROM} } : split( /\s*,\s*/, ($statement{FROM} || 'me')) ];
 
 	# WHERE		            # fld|?(=|>|<|!|==|>>|<<|!!|~|!~|^|_|`|*|!*)val
-#	$self->make_selector($statement{WHERE});
   	$statement{selector}	= $self->make_selector($statement{WHERE});
 
 	bless { %{ $self }, %statement }, ref($self) || $self
@@ -1451,7 +1466,7 @@ sub do_update {
 
 		chomp $self->{CURRENT}{LINE};
 
-		# parse this record's data into expected fields; providing fld count + 1 assures all flds are defined
+		# parse this record's data into expected fields; providing fld count + 1 ensures all flds are defined
 		@{ $self->{CURRENT}{ROW} }{@flds}	= split $self->{_input_sep} => $self->{CURRENT}{LINE}, @flds + 1;
 
 		# Sanify field values with nulls, protecting zero values
@@ -1925,8 +1940,11 @@ sub do_browse {
 
 			push @{ $self->{BYTES}->{start_bytes} } => $self->{CURRENT}{LINE_START_BYTE};
 
-			# parse this record's data into expected fields; providing fld count + 1 assures all flds are defined
-			@{ $self->{CURRENT}{ROW} }{@flds}	= split /(?:$self->{_input_sep}|$self->{_record_sep})/ => $self->{CURRENT}{LINE}, @flds + 1;
+			# parse this record's data into expected fields;
+			# providing fld count + 1 ensures all flds are defined
+			@{ $self->{CURRENT}{ROW} }{@flds}
+				= split /(?:$self->{_input_sep}|$self->{_record_sep})/ =>
+					$self->{CURRENT}{LINE}, @flds + 1;
 
 			# Sanify field values with nulls, protecting zero values
 			# Trim leading and trailing whitespace
@@ -1943,7 +1961,7 @@ sub do_browse {
 			}
 
  			# optional line processing while browsing; does not change data in file
-			for my $process ( @{ $self->{_procs} } ) { next unless $process; $self->$process() }
+			for my $process ( @{ $self->{_procs} } ) { $self->$process() }
 
 			# stop reading all files if limit is reached
 			if ($self->{selector}->{count} >= $self->{LIMIT}->[0]) {
@@ -2048,7 +2066,7 @@ sub do_index {
 
 			push @{ $self->{BYTES}->{start_bytes} } => $self->{CURRENT}{LINE_START_BYTE};
 
-			# parse this record's data into expected fields; providing fld count + 1 assures all flds are defined
+			# parse this record's data into expected fields; providing fld count + 1 ensures all flds are defined
 			@{ $self->{CURRENT}{ROW} }{@flds}	= split $self->{_input_sep} => $self->{CURRENT}{LINE}, @flds + 1;
 
 			# Sanify field values with nulls, protecting zero values
@@ -2322,8 +2340,11 @@ sub do_select {
 
 				chomp $self->{CURRENT}{LINE};
 
-				# parse this record's data into expected fields; providing fld count + 1 assures all flds are defined
-				@{ $self->{CURRENT}{ROW} }{@flds}	= split $self->{_input_sep} => $self->{CURRENT}{LINE}, @flds + 1;
+				# Parse this record's data into expected fields;
+				# Providing fld count + 1 ensures all flds are defined
+				@{ $self->{CURRENT}{ROW} }{@flds}
+					= split $self->{_input_sep} =>
+						$self->{CURRENT}{LINE}, @flds + 1;
 
 				# Sanify field values with nulls, protecting zero values
 				# Trim leading and trailing whitespace
@@ -2347,15 +2368,19 @@ sub do_select {
 
 				# Store a sort key, with count number added for stable sorts
 				# and with row byte number attached for lookups in the temp db.
-				# If no ORDER is specified, the sort key is the count number (with the row byte number attached).
+				# If no ORDER is specified, the sort key is the count number
+				# (with the row byte number attached).
 				push @table_sort_list, pack $self->{_select}->{idxpack},
-										map { lc( $_ ) }
-											@{ $self->{CURRENT}{ROW} }{ @{ $self->{ORDER}->{flds} } },
-											$self->{selector}->{count}-1,
-											tell $tbl_fh; #
+					map { lc( $_ ) }
+						@{ $self->{CURRENT}{ROW} }{ @{ $self->{ORDER}->{flds} } },
+						$self->{selector}->{count}-1,
+						tell $tbl_fh; #
 
 				# Now print the desired columns of the record to the temp db #***
-				print $tbl_fh pack( $self->{_select}->{recordpack}, @{ $self->{CURRENT}{ROW} }{ @{ $self->{_select}->{flds} } }), $self->{_record_sep};
+				print $tbl_fh pack(
+					$self->{_select}->{recordpack},
+					@{ $self->{CURRENT}{ROW} }{ @{ $self->{_select}->{flds} } }
+				), $self->{_record_sep};
 
 				# Stop reading table if max is reached
 				last LINE if $self->{selector}->{count} >= $self->{LIMIT}->[0];
