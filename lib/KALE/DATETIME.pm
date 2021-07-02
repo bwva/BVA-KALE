@@ -420,7 +420,6 @@ sub us_string {
 		@date		= reverse @date;
 		return timelocal(@date);
 	}
-
 }
 
 sub duration_to_secs {
@@ -657,7 +656,7 @@ BEGIN {
 		dec => 12,	Dec => 12,	December	=> 12,
 	);
 
-
+	# 'ly' = leap year
 	%BVA::KALE::DATETIME::MONTH_MAX_DAYNUM		= (
 		1		=> 31,	'01'	=> 31,	jan		=> 31,	Jan		=> 31,	January		=> 31,
 		2		=> 28,	'02'	=> 28,	feb		=> 28,	Feb		=> 28,	February	=> 28,
