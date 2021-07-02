@@ -184,7 +184,6 @@ sub float {
 									|| $KEY{$fld}
 										|| $KEY{_meta}{$fld}{default}
 											|| 0;
-# 	$right				= (!$right && ~$right) ? 0 : $right || 2;
  	$right				= (!$right & ~$right) == 1 ? 0 : $right || 2;
  	$amt =~ /^[0-9.+-]+$/ ? sprintf(qq{%.${right}f}, $amt) : $amt;
 }
@@ -214,22 +213,23 @@ sub labeled {
 	my $val;
 	$val				= exists $KEY{_vals}->{$fld} ? $KEY{_vals}->{$fld} :
 							exists $KEY{$fld} ? $KEY{$fld} : $val;
-# 	if (defined $val && !$val && ~$val) {
-	if (defined $val and (!$val & ~$val) == 1) {
-		$val	= '0'
-	} elsif (!$val) {
-		$val	= exists $KEY{_meta}{$fld}{default} ? $KEY{_meta}{$fld}{default} :
-					exists $KEY{_meta}{$fld}{null} ? $KEY{_meta}{$fld}{null} :
-						'';
-		return ' ' if (!$val && $hide_null);
+# 	if (defined $val and (!$val & ~$val) == 1) { # <-- CORRECT
+	if (!$val) {
+		if (defined $val and length $val) {
+			$val	= '0'
+		} else {
+			$val	= exists $KEY{_meta}{$fld}{default} ? $KEY{_meta}{$fld}{default} :
+						exists $KEY{_meta}{$fld}{null} ? $KEY{_meta}{$fld}{null} :
+							'';
+			return ' ' if (!$val && $hide_null);
+		}
 	}
-
 	if ($label) {
 		sprintf qq{%15.30s %s},
 			$label,
 			$val
 	} elsif (exists $KEY{_meta}) {
-		if ($KEY{_meta}{$fld}{type} =~ /a/i) {
+		if (exists $KEY{_meta}{$fld}{type} and $KEY{_meta}{$fld}{type} =~ /a/i) {
 			if ($KEY{_env} =~ /htm/i) {
 				$val			=~ s{\\}{<br>\n}gs;
 				sprintf qq{<dl><dt>%s:</dt><dd class="box_as_item">\n%s\n</dd></dl>},
@@ -240,7 +240,7 @@ sub labeled {
 				sprintf qq{%s:\n%s\n},
 					$KEY{_meta}{$fld}{label}, $val
 			}
-		} elsif ($KEY{_meta}{$fld}{type} =~ /b/i) {
+		} elsif (exists $KEY{_meta}{$fld}{type} and $KEY{_meta}{$fld}{type} =~ /b/i) {
 			my $show_val		= $val ? 'Yes' : 'No';
 			if ($KEY{_env} =~ /htm/i) {
 				sprintf qq{%15.30s: <b>%s</b>},
@@ -251,7 +251,7 @@ sub labeled {
 					$KEY{_meta}{$fld}{label} || join( ' ' => map { ucfirst($_) } (split /_|\./ => $fld) ),
 					$show_val
 			}
-		} elsif ($KEY{_meta}{$fld}{type} =~ /ct/i) {
+		} elsif (exists $KEY{_meta}{$fld}{type} and $KEY{_meta}{$fld}{type} =~ /ct/i) {
 			my ($show_val,$h,$m,$s)	= ('','','','');
 			if ($val and $val =~ /^(\d\d):(\d\d)(:(\d\d))?$/) {
 				$h	= $1;
@@ -356,6 +356,54 @@ sub value {
 	$out
 
 }
+
+sub value_pipe {
+	my $obj				= shift;
+	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+    my $arg             = shift;
+    my ($fld, $alt, $null_type) = split(/\s*\|\s*/ => $arg );
+    defined($alt) or $alt = '';
+    defined($null_type) or $null_type = '';
+    NULLTYPE: {
+      local $_ = $null_type;
+      /^[1-9][0-9]*$/     and $null_type = ' ' x $null_type, last NULLTYPE;
+
+      /^eol$/     and $null_type = "\n"
+        or
+      /^tab$/     and $null_type = "t"
+        or
+      /^q$/       and $null_type = "\"\""
+        or
+      /^qs$/      and $null_type = "''"
+        or
+      /^zbt$/     and $null_type = "0 but true"
+        or
+      /^zz$/      and $null_type = '00'
+        or
+      /^z$/       and $null_type =  'zero'
+        or
+      /^zero$/    and $null_type =  '0'
+        or
+      /^n$/       and $null_type =  ''
+    }
+
+     my $out		= $KEY{_vals}->{$fld} || $KEY{$fld} || $KEY{_vals}->{$alt} || $KEY{$alt} || (exists $KEY{$alt} ? "" : $alt) || $null_type;
+#    my $out		= $KEY{_vals}->{$fld} || $KEY{$fld} || $KEY{_vals}->{$alt} || (exists $KEY{$alt} ? $KEY{$alt} : $alt) || $null_type;
+
+    if ($KEY{_env} =~ /htm/i) {
+		$out			=~ s{\\}{<br>\n}gs;
+	} else {
+		$out			=~ s{\\}{\n}gs;
+	}
+
+	# Protect "false" values
+	$KEY{__DONE__}++ unless $out;
+
+	$out
+
+}
+
+
 
 sub time {
 	my $obj				= shift;
@@ -1396,6 +1444,17 @@ sub actions {
 	$buttons			.= '</p>';
 }
 
+sub actions_term {
+	my $obj				= shift;
+	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+	my $arg				= shift;
+	my $buttons			= qq{\n};
+	my $btn_count		= 0;
+	$arg				= $KEY{"${arg}_acts"} || $KEY{"${arg}.acts"} || $KEY{$arg} || $arg;
+	my @acts			= ref($arg) ? @{ $arg } : split(/\s*,\s*/ => $arg);
+	$buttons 			.= join "\n" => @acts, "";
+}
+
 sub input {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
@@ -1423,17 +1482,31 @@ sub input_term {
 	my $arg		= shift;
 	my ($fld,$val,$def,$lbl,$echo,$note)	= split(/\s*,\s*/ => $arg, 6 );
 	return '' unless $fld;
-	$def	||= '';
+	$def	||= ( $KEY{_default} and $KEY{_default}->{$fld} ) ?
+					$KEY{_default}->{$fld}
+				: ( $KEY{_meta} and $KEY{_meta}->{$fld} ) ?
+					$KEY{_meta}->{$fld}->{default} || ''
+				: '';
 	$val	= $val || $KEY{$fld} || $KEY{_vals}->{$fld} || $def || '';
-	$lbl	= defined( $KEY{_label} ) ? ($KEY{_label}->{$fld} || $fld) : $fld;
+	$lbl	||= ( $KEY{_label} and $KEY{_label}->{$fld} ) ?
+					$KEY{_label}->{$fld}
+				: ( $KEY{_meta} and $KEY{_meta}->{$fld} ) ?
+					$KEY{_meta}->{$fld}->{label} || $fld
+				: $fld;
 	$echo	||= 0;
 	$note	= $note ? "$note\n " : '';
 	my $verb	= $val ? 'Confirm' : 'Provide';
-	print "$note Please $verb $lbl [$val]:";
+# 	print "$note Please $verb $lbl [$val]: ";
+	print "$note $lbl [$val]: ";
 	my $input = <STDIN> || '';
 	chomp $input;
 	$input ||= $val;
-	$obj->charge($fld => $input);
+
+	#$obj->charge($fld => $input);
+ 	$KEY{_input}->{$fld}	= $input;
+#	$obj->charge_meta(_input => { %{ $KEY{_input} }, ($fld => $input) } );
+	$obj->checkfordates;
+	$obj->checkfortimes;
 	print "$input\n" if $echo;
  	return $input || "";
 }
@@ -1484,25 +1557,26 @@ sub img {
 	sprintf qq{<img src="%s" alt="%s">}, $file, $title || ''
 }
 
-sub Xcollect {
+sub tabline {
 	my $obj				= shift;
 	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
 	my $arg				= shift;
 	my $mark			= $KEY{_mark};
-	# COLLECT=all  COLLECT=first_name, last_name, type1, type 2
+	# TABLINE=all  TABLINE=first_name, last_name, type1, type 2
 	my @fields;
-	my $RE				= $KEY{_type_RE};
+	my $RE				= $KEY{_type_RE} || '';
 	for my $n (split(/\s*,\s*/ => $KEY{$arg} || $arg ) ) {
-		$n =~ /^\s*all\s*$/i
-			and push @fields => @{ $KEY{_flds} }
-		or
-		$n =~ /^\s*$RE{1}\s*$/
-			and push @fields => grep { $KEY{_meta}{$_}{type} eq $n } @{ $KEY{_flds} }
-		or
-		push @fields => $n
+		if ($n =~ /^\s*all\s*$/i) {
+			push @fields => @{ $KEY{_flds} };
+		} elsif ($RE and $n =~ /^\s*$RE{1}\s*$/) {
+			push @fields => grep { $KEY{_meta}{$_}{type} eq $n } @{ $KEY{_flds} };
+		} else {
+			push @fields => $n || '';
+		}
 	}
-	join "\n\n" => map { input(\*KEY, $_, $mark) } @fields
+  	join "\t" => map { $KEY{$_} || '' } @fields, "\n"
 }
+
 
 sub collect {
 	my $obj				= shift;
@@ -1521,10 +1595,34 @@ sub collect {
 			push @fields => $n
 		}
 	}
-  	join "\n\n" => map { input($obj, $_, $mark) } @fields
-# 	join "\n" => map { input_term($obj, $_) } @fields
-#	join "\n\n" => map { $obj->process(qq{input=$_}) } @fields
+#   	join "" => map { input($obj, $_, $mark) } @fields
+  	join "\n" => map { input($obj, $_, $mark) } @fields
+#   	join "\n\n" => map { input($obj, $_, $mark) } @fields
+#  		join "\n" => map { input_term($obj, $_) } @fields
+ #		join "\n\n" => map { $obj->process(qq{input=$_}) } @fields
 }
+
+sub collect_term {
+	my $obj				= shift;
+	local *KEY			= $obj->invert(); # ref($obj) eq __PACKAGE__ ? $obj : *{ $obj };
+	my $arg				= shift;
+	my $mark			= $KEY{_mark};
+	# COLLECT=all  COLLECT=first_name, last_name, type1, type 2
+	my @fields;
+	my $RE				= $KEY{_type_RE} || '';
+	for my $n (split(/\s*,\s*/ => $KEY{$arg} || $arg ) ) {
+		if ($n =~ /^\s*all\s*$/i) {
+			push @fields => @{ $KEY{_flds} }
+		} elsif ($RE and $n =~ /^\s*$RE{1}\s*$/) {
+			push @fields => grep { $KEY{_meta}{$_}{type} eq $n } @{ $KEY{_flds} }
+		} else {
+			my ($fld,$def)  = split ':' => $n,2; $def //= '';
+			push @fields => "$fld,$def";
+		}
+	}
+ 	join "\n" => map { input_term($obj, $_) } @fields;
+}
+
 
 sub collect_hidden {
 	my $obj				= shift;

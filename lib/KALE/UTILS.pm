@@ -150,6 +150,8 @@ entrain() -- return reliable element sets from lists
 
 =head1 SYNOPSIS
 
+  my @list		= list_from_somewhere();
+
   my $pairs		= entrain 2, @list;
   while (my ($key,$val) = $pairs->()) { ... }
 
@@ -159,9 +161,6 @@ entrain() -- return reliable element sets from lists
 	printf qq{%6s %5s %8s\n} => @items;
 	$total += $items[2];
   }
-
-
-
 
 =head1 DESCRIPTION
 

@@ -7,7 +7,7 @@ use warnings;
 
 sub meta_fldtype_defaults {
 	my $self	= shift;
-	
+
 	return {
 		_sort_packs 	=> \%BVA::KALE::DATA::META::sort_packs,
 		_record_packs	=> \%BVA::KALE::DATA::META::record_packs,
@@ -28,13 +28,14 @@ sub meta_fldtype_defaults {
 	'h'		=> 'A#',
 	'r'		=> 'A#',
 	'rset'	=> 'A#',
+	'cset'	=> 'A#',
 	'pop'	=> 'A#',
 	'c'		=> 'A#',
 	'f'		=> 'A#',
 	'p'		=> 'A#',
 	'm'		=> 'A#',
-);	 
-	 
+);
+
 %BVA::KALE::DATA::META::record_packs = (
 	't'		=> 'Z*',
 	'n'		=> 'Z*',
@@ -46,6 +47,7 @@ sub meta_fldtype_defaults {
 	'h'		=> 'Z*',
 	'r'		=> 'Z*',
 	'rset'	=> 'Z*',
+	'cset'	=> 'Z*',
 	'pop'	=> 'Z*',
 	'c'		=> 'Z*',
 	'f'		=> 'Z*',
@@ -64,6 +66,7 @@ sub meta_fldtype_defaults {
 	'h'		=> 'A#',
 	'r'		=> 'A#',
 	'rset'	=> 'A#',
+	'cset'	=> 'A#',
 	'pop'	=> 'A#',
 	'c'		=> 'A#',
 	'f'		=> 'A#',
@@ -82,6 +85,7 @@ sub meta_fldtype_defaults {
 	'h'		=> '%-#.#s',
 	'r'		=> '%-#.#s',
 	'rset'	=> '%-#.#s',
+	'cset'	=> '%-#.#s',
 	'pop'	=> '%-#.#s',
 	'c'		=> '%-#.#s',
 	'f'		=> '%-#.#s',
@@ -100,6 +104,7 @@ sub meta_fldtype_defaults {
 	'h'		=> '',
 	'r'		=> '',
 	'rset'	=> '',
+	'cset'	=> '',
 	'pop'	=> '',
 	'c'		=> '',
 	'f'		=> '',
