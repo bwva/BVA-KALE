@@ -1,7 +1,7 @@
 package BVA::KALE;
 
-$BVA::KALE::VERSION      = "3.08.01";
-$BVA::KALE::VERSION_DATE = '2019-12-02';
+$BVA::KALE::VERSION      = "3.09.03";
+$BVA::KALE::VERSION_DATE = '2020-07-05';
 
 use strict;
 use warnings;
@@ -9,7 +9,8 @@ use warnings;
 use Carp;
 use Data::Dumper;
 use IO::Handle;
-use Cpanel::JSON::XS;
+#use Cpanel::JSON::XS;
+use JSON::MaybeXS;
 
 use vars qw/ *KEY *KALE *OUTPUT *INPUT /;
 
@@ -22,7 +23,7 @@ BVA::KALE - Extensible User Interface!
 
 =head1 VERSION
 
-Version 3.08.01
+Version 3.09.01
 
 =cut
 
@@ -38,10 +39,10 @@ KALE provides methods and structures for creating dynamic user interfaces.
     $students->form($tmpl);
     my $counter		= 0;
     while (my $st = $sth->fetchrow_hashref()) {	# data from somewhere
-    											# including fields firstname,lastname,birthdate
-    	$students->charge($st);
-    	$students->charge(number => $counter++);
-    	$students->buffer;
+											# including fields firstname,lastname,birthdate
+	$students->charge($st);
+	$students->charge(number => $counter++);
+	$students->buffer;
     }
     my $list	= join '' $students->flush();
 
@@ -93,7 +94,7 @@ sub init {
 	  : 'KEY';
 	$KEY{_ui_mark} = $KEY{_mark};
 
-	$KEY{_sub} ||= \&OUTPUT;
+	$KEY{_out_sub} ||= $KEY{_sub} ||= \&OUTPUT;
 	$KEY{_match_str} =
 	  qr{(?s:((\Q$KEY{_start}$KEY{_mark}\E)[: -]((.(?!\2))*?)\Q$KEY{_end}\E))};
 	$KEY{_default_tmpl} = qq{$KEY{_start}$KEY{_mark} DATA=_mark$KEY{_end}};
@@ -117,7 +118,7 @@ sub init {
 
 	## If a master output sub was specified, assign it to the typeglob
 	unless ( defined &KEY ) {
-		*KEY = $KEY{_sub} || \&{"KEY{_mark}"};
+		*KEY = $KEY{_out_sub} || \&{"KEY{_mark}"};
 	}
 
 	## _objects: Store a reference to the generator's buffer
@@ -158,10 +159,10 @@ sub new {
 		%new_props = %{ $args[0] };
 	}
 	elsif ( $argref =~ /ARRAY/i ) {
-		@new_props{qw/_mark _file _start _end _sub/} = @{ $args[0] };
+		@new_props{qw/_mark _file _start _end _out_sub/} = @{ $args[0] };
 	}
 	else {
-		@new_props{qw/_mark _file _start _end _sub/} = @args;
+		@new_props{qw/_mark _file _start _end _out_sub/} = @args;
 	}
 	%new_props =
 	  map { $new_props{$_} ? ( $_ => $new_props{$_} ) : () } keys %new_props;
@@ -206,7 +207,7 @@ sub new {
 	$properties{_obj_init_time} =
 	  BVA::KALE::DATETIME::tell_time( 'secs', time );
 
-	$properties{_sub} ||= \&OUTPUT;
+	$properties{_out_sub} ||= $properties{_sub} ||= \&OUTPUT;
 
 	## Match Pattern and Default Template
 	if ( $properties{'_is_direct'} ) {
@@ -216,7 +217,7 @@ sub new {
 	else {
 		$properties{_match_str} =
 qr{(?s:((\Q$properties{_start}$properties{_mark}\E)[: -]((.(?!\2))*?)\Q$properties{_end}\E))};
-# 		$properties{_default_tmpl} =
+#		$properties{_default_tmpl} =
 		$properties{_default_tmpl} ||=   # 2019-12-21
 		  qq{$properties{_start}$properties{_mark}:DATA=_mark$properties{_end}};
 	}
@@ -255,7 +256,7 @@ qr{(?s:((\Q$properties{_start}$properties{_mark}\E)[: -]((.(?!\2))*?)\Q$properti
 			*{"main::$properties{_mark}"} = \%properties;
 			unless ( defined &{"main::$properties{_mark}"} ) {
 				*{"main::$properties{_mark}"} =
-				  $properties{_sub} || \&{"main::$properties{_mark}"};
+				  $properties{_out_sub} ||= $properties{_sub} || \&{"main::$properties{_mark}"};
 			}
 			bless \*{"main::$properties{_mark}"}, ref($gen_obj) || $gen_obj;
 		} else {
@@ -299,7 +300,7 @@ sub invert {
 	return ( ref($self) eq __PACKAGE__ ? $self : \*{$self} );
 }
 
-sub generator ($) {
+sub generator {
 	my ($self) = @_;
 	local *KEY = $self->invert();
 	return $KEY{_generator};
@@ -308,9 +309,10 @@ sub generator ($) {
 ## Objects: returns a list of all current UI objects, or
 ## a list of the objects specified in the args with
 ## valid KEY marks ($KEY{_mark} -- 'KEY').
-sub objects ($;@) {
+sub objects {
 	my ( $self, @object_names ) = @_;
-	local *KEY = invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
 	my @objs = grep { ref($_) eq __PACKAGE__ } @{ $KEY{_objects} };
 
@@ -333,9 +335,10 @@ sub object_marks_in_use {
 
 ## Object: returns a UI object specified by a single arg
 ## with a valid KEY marks ($KEY{_mark} -- 'KEY').
-sub object ($;$) {
+sub object {
 	my ( $self, $object_name ) = @_;
-	local *KEY = invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
 	return $KEY{_generator} unless $object_name;
 
@@ -361,9 +364,11 @@ sub object ($;$) {
 ## no brackets needed. E.g., if _mark is 'SUP', SUP:address or SUP.address
 ## 2015-02-03 use of underscore '_' removed
 ## 2015-02-24 added caching of $KEY{_direct}
-sub direct ($;@) {
+sub direct {
 	my ( $self, $sub ) = @_;
-	local *KEY = invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
+
 	$sub ||= sub {
 		my ( $innerself, $field ) = @_;
 		return '' unless defined $field;
@@ -382,7 +387,7 @@ sub direct ($;@) {
 		my $match_str1 =
 			qr{(?sx: ((\Q${start}${mark}\E)	(?:\:|\s|\b)	((.(?!\2))+?)	\Q${end}\E) )};
 		my $match_str2 =
-			qr{(?sx: ((\Q${owner}\E[:.])					((\S(?!\2))+?)	(?:\b))   	)};
+			qr{(?sx: (((?<! \Q${start}\E)\Q${owner}\E[:.])	((\S(?!\2))+?)	(?:\b)) 	)};
 		$KEY{_direct} = $KEY{_generator}->new(
 			{
 				_is_direct => 1,
@@ -391,7 +396,7 @@ sub direct ($;@) {
 				_end       => $end,
 				_owner     => $owner,
 				_match_str => qr{(?sx: $match_str1 | $match_str2 )},
-				_sub       => $sub,
+				_out_sub      => $sub,
 			}
 		);
 	}
@@ -408,9 +413,10 @@ sub direct ($;@) {
 ## Multiple args are joined with '' because _process_tmpl takes only one template arg.
 ## NOTE: Unlike render(), resolve does NOT auto-charge or calculate,
 ## to avoid traps in deep recursion.
-sub resolve ($@) {
+sub resolve {
 	my $self = shift;
-	local *KEY = invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
 	if ( $KEY{_is_direct} ) {
 		return $self->replace(@_);
@@ -433,7 +439,7 @@ sub resolve ($@) {
 
 	@KALE = @KEY;
 
-# 	$KALE = @_ ? join( '' => @_ ) : '';
+#	$KALE = @_ ? join( '' => @_ ) : '';
 	$KALE = @_ ? join( '' => @_ ) : $KEY;
 
 	my $owner = $KALE{_mark};
@@ -443,7 +449,7 @@ sub resolve ($@) {
 	my $match_str1 =
 	  qr{(?sx: ((\Q${start}${mark}\E)	(?:\:|\s|\b)	((.(?!\2))+?)	\Q${end}\E) )};
 	my $match_str2 =
-	  qr{(?sx: ((\Q${owner}\E[.:])						((\S(?!\2))+?)	(?:\b))   	)};
+	  qr{(?sx: (((?<! \Q${start}\E)\Q${owner}\E[.:])	((\S(?!\2))+?)	(?:\b)) 	)};
 	$KALE{_owner} = $owner;
 
   GO: {
@@ -460,24 +466,25 @@ sub resolve ($@) {
 	return $KALE;
 }
 #
-sub index_resolve ($@) {
+sub index_resolve {
 	my ($self, @strings)	= (@_);
-   	local *KEY	= invert($self);
 
- 	$KEY		= @strings ? join( '' => @strings) : '';
+	local *KEY	= ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
- 	my $owner	= $KEY{_mark};
- 	my $mark	= $KEY{_direct_mark}	|| ':';
- 	my $start	= $KEY{_direct_start}	|| '[';
- 	my $end		= $KEY{_direct_end}		|| ']';
- 	my $index_str			= $start . $mark;
- 	my $index_str_len		= length $index_str;
- 	my $index_str_end		= $end;
- 	my $index_str_end_len	= length $index_str_end;
- 	my $startPos			= 0;
+	$KEY		= @strings ? join( '' => @strings) : '';
+
+	my $owner	= $KEY{_mark};
+	my $mark	= $KEY{_direct_mark}	|| ':';
+	my $start	= $KEY{_direct_start}	|| '[';
+	my $end		= $KEY{_direct_end}		|| ']';
+	my $index_str			= $start . $mark;
+	my $index_str_len		= length $index_str;
+	my $index_str_end		= $end;
+	my $index_str_end_len	= length $index_str_end;
+	my $startPos			= 0;
 
 	GO: {
-		my $str 	= $KEY;
+		my $str	= $KEY;
 		my $pos1	= index $str, $index_str, $startPos;
 		last GO if $pos1 < 0;
 
@@ -491,11 +498,11 @@ sub index_resolve ($@) {
 		substr $str, $pos1, $pos2 + $index_str_end_len - $pos1, (length $KEY{$extract} ? $KEY{$extract} : "");
 		last GO if $str eq $KEY;
 		$startPos		= $pos1;
-		$KEY 			= $str;
+		$KEY			= $str;
 		redo GO;
 	}
 
- 	return $KEY;
+	return $KEY;
 }
 
 ## Render: Class method that recursively processes
@@ -508,9 +515,10 @@ sub index_resolve ($@) {
 ## Processing cycles through all ui objects until a full cycle yields
 ## no further change to the output.
 ## Returns processed output.
-sub render ($;@) {
+sub render {
 	my ( $self, @strings ) = (@_);
-	local *KEY = $self->invert();
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
 	my $tmpl =
 	     join( '' => @strings )
@@ -538,7 +546,7 @@ sub render ($;@) {
 			my ( $start, $end, $mark, $own_match_str ) =
 			  $obj->data( '_start', '_end', '_mark', '_match_str' );
 			$obj->charge_meta( _match_str =>
-qr{(?s:((\Q${start}${mark}\E)[: ]((.(?!${start_pat}${mark_pat}))*?)\Q$end\E))}
+				qr{(?s:((\Q${start}${mark}\E)[: ]((.(?!${start_pat}${mark_pat}))*?)\Q$end\E))}
 			);
 			$tmpl = $obj->_process_tmpl($tmpl);
 			$obj->charge_meta( _match_str => $own_match_str );
@@ -552,7 +560,8 @@ qr{(?s:((\Q${start}${mark}\E)[: ]((.(?!${start_pat}${mark_pat}))*?)\Q$end\E))}
 
 sub inventory_tmpl {
 	my $obj = shift;
-	local *KEY = $obj->invert();
+
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my @tokens;
 
@@ -570,7 +579,13 @@ sub inventory_tmpl {
 
 	@KALE = @KEY;
 
-	$KALE = @_ ? join( '' => @_ ) : $KEY || '';
+	$KALE = '';
+
+	for my $t (@_) {
+		$KALE .= exists $KEY{_displays}->{$t} ? $KEY{_displays}->{$t} : $t;
+	}
+
+	$KALE ||= $KEY || '';
 
 	my $tmpl = $KALE;
 
@@ -589,9 +604,10 @@ sub inventory_tmpl {
 	return @tokens;
 }
 
-sub render_qp ($;@) {
+sub render_qp {
 	my ( $self, @strings ) = (@_);
-	local *KEY = $self->invert();    # invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
 	@BVA::KALE::OUT::OUT = ();
 
@@ -635,9 +651,10 @@ qr{(?s:((\Q${start}${mark}\E)[: ]((.(?!${start_pat}${mark_pat}))*?)\Q$end\E))}
 
 ## Replace: Processes the current template with available data;
 ##			Returns processed output.
-sub replace ($;@) {
+sub replace {
 	my ( $self, @strings ) = (@_);
-	local *KEY = $self->invert();    # invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
 	my $tmpl =
 	     join( '' => @strings )
@@ -649,7 +666,7 @@ sub replace ($;@) {
 	return $tmpl;
 }
 
-## Process: Provides OO access to dispatch sub $KEY{_sub}.
+## Process: Provides OO access to dispatch sub $KEY{_sub} [changed to $KEY{_out_sub}].
 ## The arg is the same as what replace() would pass to the dispatcher
 ## after stripping off the _start, _mark, and _end tokens.
 ## In list context, returns an array whose elements
@@ -661,7 +678,8 @@ sub replace ($;@) {
 ## where _start is '<!--', _mark is 'KEY', _end is '-->.
 sub process {
 	my ( $self, @strings ) = (@_);
-	local *KEY = $self->invert();    # invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
 	return '' unless @strings;
 
@@ -680,11 +698,12 @@ sub process {
 ## by using pattern matching [_start][_mark](...)[_end]
 ## and handing each (...) to the UI object's designated OUTPUT dispatcher.
 ## The OUTPUT() dispatcher uses available data and subroutines or defaults to
-## substitute for (...), and returns the result for another iteration.
+## substitute for (...), and then puts the result through another iteration.
 ## Returns $tmpl after substitutions are exhausted.
-sub _process_tmpl ($$) {
+sub _process_tmpl {
 	my ( $self, $tmpl ) = @_;
-	local *KEY = $self->invert();    # invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
 	defined &KEY
 	  or *KEY = \&OUTPUT;
@@ -704,9 +723,10 @@ sub _process_tmpl ($$) {
 	return $tmpl;
 }
 
-sub _index_process_tmpl ($$) {
+sub _index_process_tmpl {
 	my ( $self, $tmpl ) = @_;
-	local *KEY = $self->invert();    # invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
 	defined &KEY
 	  or *KEY = \&OUTPUT;
@@ -744,13 +764,15 @@ sub _index_process_tmpl ($$) {
 ## Attach file: allows a file to be specified after instantiation of the object
 sub attach_file {
 	my ( $self, $file, $keep_open ) = @_;
-	local *KEY = $self->invert();    # invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
+
 	$file ||= undef;
 	$keep_open ||=
 	  0;    # only affects named files, not tmp files or scalar variable
 
 	if ( !$file ) {
-		if ( open KEY, "+>>:encoding(UTF8)", undef ) {
+		if ( open *KEY, "+>>:encoding(UTF8)", undef ) {
 			*KEY{IO}->autoflush();
 			$KEY{_file_as_opened} =
 			  [ 'Tmp', *KEY{IO}->fileno(), *KEY{IO}->stat() ];
@@ -764,7 +786,7 @@ sub attach_file {
 	}
 	elsif ( $file eq '^' ) {
 		$KEY{_vfile} = '';
-		if ( open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} ) {
+		if ( open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} ) {
 			*KEY{IO}->autoflush();
 			$KEY{_file} = $file;
 			$KEY{_file_as_opened} =
@@ -772,8 +794,8 @@ sub attach_file {
 			$KEY{_file_keep_open} = 1;
 		}
 		else {
-			warnings::warnif( 'io', "Problem with attaching temp file:\n$!" );
-			charge_err( \*KEY, "Problem with attaching temp file:\n$!" )
+			warnings::warnif( 'io', "Problem with attaching virtual file:\n$!" );
+			charge_err( \*KEY, "Problem with attaching virtual file:\n$!" )
 			  and return;
 		}
 	}
@@ -782,7 +804,7 @@ sub attach_file {
 	}
 	elsif ( $file =~ m{^([^`]+)$} ) {
 		$file = $1;
-		if ( open KEY, "+>>:encoding(UTF8)", $file ) {
+		if ( open *KEY, "+>>:encoding(UTF8)", $file ) {
 			*KEY{IO}->autoflush();
 			$KEY{_file} = $file;
 			$KEY{_file_as_opened} =
@@ -812,9 +834,9 @@ sub attach_file {
 ## Buffer: Same as replace, plus all output is accumulated in the array
 ## @KEY, which may be accessed as @{$mark} in the calling program
 ## or by using any of the flush or read variants:
-## flush(), flush_lifo(), flush_next(), flush_last(), flush_trained, flush_random,
+## flush, flush_lifo, flush_next, flush_last, flush_trained, flush_random, flush_joined
 ## read_fifo(), read_lifo(), read_unique(), read_except()
-sub buffer ($;@) {
+sub buffer {
 	my $arg1 = shift;
 	local *KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
 
@@ -832,7 +854,7 @@ sub buffer ($;@) {
 	return $tmpl;
 }
 
-sub buffer_resolved ($;@) {
+sub buffer_resolved {
 	my $arg1 = shift;
 	local *KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
 
@@ -856,15 +878,15 @@ sub buffer_trained {
 }
 
 ## Flush: returns and clears the @KEY buffer
-sub flush ($) {
+sub flush {
 	goto &flush_refsOK;
 }
 
 ## Flush: returns and clears the @KEY buffer
-sub flush_refsOK ($) {
+sub flush_refsOK {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my @buf;
 	my @strs;
@@ -891,13 +913,44 @@ sub flush_refsOK ($) {
 	  wantarray ? @buf : @refs ? [ @refs, join '' => @buf ] : join '' => @buf;
 }
 
+sub flush_joined {
+	my $obj = shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+
+	my $sep	= shift || '';
+
+	my @buf;
+	my @strs;
+	my @refs;
+	my @globs;
+	foreach my $elem (@KEY) {
+		my $elemRef = '';
+		if ( $elemRef = ref($elem) ) {
+			if ( $elemRef eq __PACKAGE__ ) {
+				push @globs => $elem;
+			}
+			else {
+				push @refs => $elem;
+				push @buf  => $elem;
+			}
+		}
+		else {
+			push @strs => $elem;
+			push @buf  => $elem;
+		}
+	}
+	@KEY = @globs;
+
+	return join $sep => @buf;
+}
+
 ## Flush Num: Iterates through @KEY for the number of times specified in the second arg,
 ## returning the first valid value, which is deleted from @KEY each iteration
-sub flush_num ($$) {
+sub flush_num {
 	my $obj = shift;
-	my $num = shift || 1;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
-	local *KEY = $obj->invert();
+	my $num = shift || 1;
 
 	my @keep;
 	my @out;
@@ -918,10 +971,10 @@ sub flush_num ($$) {
 }
 
 ## Flush Next: Iterates through @KEY, returning the first valid value, which is deleted from @KEY
-sub flush_next ($) {
+sub flush_next {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my @buf;
 	my @keep;
@@ -941,10 +994,10 @@ sub flush_next ($) {
 }
 
 ## Flush Last: Iterates through @KEY, returning the last valid value, which is deleted from @KEY
-sub flush_last ($) {
+sub flush_last {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my @buf;
 	my @keep;
@@ -964,10 +1017,10 @@ sub flush_last ($) {
 }
 
 ## Flush_lifo: returns and clears the @KEY buffer, last in first out
-sub flush_lifo ($) {
+sub flush_lifo {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my @buf;
 	my @globs;
@@ -989,10 +1042,10 @@ sub flush_lifo ($) {
 ## If the arg is a string matching the form [number] : [default],
 ## the defaults are [default], and the number sets the number of @KEY elements returned.
 ## Defaults are provided when elements fail a simple truth test [i.e., doesn't test for zero vs ''].
-sub flush_trained ($;$) {
+sub flush_trained {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my $pattern = shift();
 
@@ -1040,17 +1093,17 @@ sub flush_trained ($;$) {
 ## to the order they were added to the buffer; otherwise, they are returned in the order
 ## by which they were (randomly) picked from the buffer.
 
-sub flush_random ($;$) {
+sub flush_random {
 	goto &flush_random_pick;
 }
 
 # flush_random_pick - non-repeating
-sub flush_random_pick ($;$$) {
+sub flush_random_pick {
 	my $obj = shift;
 	my $size		= shift() || 0;
 	my $ordered		= shift() || 0;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my @buf;
 	my @globs;
@@ -1076,7 +1129,7 @@ sub flush_random_pick ($;$$) {
 	my @picks;
 
 	srand();
- 	for ( 1 .. $size ) {
+	for ( 1 .. $size ) {
 		my $rand_num = int( rand $num_elems + 0 ) + 0;
 		redo if $random{$rand_num}->{seen}++;
 		$random{$rand_num}->{ord}	= $_-1;
@@ -1096,9 +1149,9 @@ sub flush_random_pick ($;$$) {
 	return @picks;
 }
 
-sub buffer_count ($;$) {
+sub buffer_count {
 	my $obj = shift;
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 	my $buf_count	= 0;
 	foreach my $elem (@KEY) {
 		next if ref($elem) eq __PACKAGE__;
@@ -1109,10 +1162,10 @@ sub buffer_count ($;$) {
 }
 
 ## read
-sub read_buffer ($) {
+sub read_buffer {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my @buf;
 	my @globs;
@@ -1128,29 +1181,29 @@ sub read_buffer ($) {
 }
 
 ## Read_fifo: returns the @KEY buffer, first in first out
-sub read_fifo ($) {
+sub read_fifo {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	return grep { !ref($_) eq __PACKAGE__ } @KEY;
 }
 
 ## Read_lifo: returns the @KEY buffer, last in first out
-sub read_lifo ($) {
+sub read_lifo {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	return reverse grep { !ref($_) eq __PACKAGE__ } @KEY;
 }
 
 ## Read_unique: returns the @KEY buffer, unique values only.
 ## Optional args are added to @KEY, dereferencing any arg found to be an array ref
-sub read_unique ($;@) {
+sub read_unique {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %found;
 	return
@@ -1161,10 +1214,10 @@ sub read_unique ($;@) {
 
 ## Read_except: returns the @KEY buffer, excluding any values matching
 ## any optional args, dereferencing any arg found to be an array ref
-sub read_except ($;@) {
+sub read_except {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %exceptions =
 	  map { ( $_ => 1 ) } map { ref($_) =~ /ARRAY/ ? @{$_} : $_ } @_;
@@ -1185,35 +1238,57 @@ sub read_except ($;@) {
 ## If the name has no starting '-' or ending '+' any additional args
 ## are concatenated as the template, and nothing is looked up.
 ##
+## Added 2020-04-30:
+## Additional args are checked to see if they are coderefs or arrayrefs;
+## if so, they are executed/de-referenced one level only,
+## and the results are substituted for them in the args list.
+##
+## All concatenationss are joined with the empty string ''.
+##
 ## The resulting template might be an empty string ''.
 ## The resulting template is added UNPROCESSED to $KEY{_displays},
 ## replacing any template already there with that name.
 ##
 ##  The resulting template is then returned.
-sub template ($;@) {
+sub template {
 	my $obj = shift;
 
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
 
-# 	my $tmpl = '';
-	my $tmpl = $KEY || $KEY{_default_tmpl}; # 2019-12-21
+	my $tmpl = '';
+#	my $tmpl = $KEY || $KEY{_default_tmpl}; # 2019-12-21 # 2020-04-27 OOPS! Bad Idea!
 	my $tmpl_name = shift || '';
 	my ( $get_tmpl_file, $template_name, $append ) =
 	  $tmpl_name =~ /^(-)?([a-zA-Z_][\w -]*?)(\+)?\s*$/;
 
 	return $tmpl unless $template_name;
 
+	## Resolve coderefs and arrayrefs - 2020-04-30
+	my @add	= ();
+	while (@_) {
+		my $item	= shift;
+		if (ref($item) =~ /CODE/i) {
+			push @add =>  $item->() || '';
+		}
+		elsif (ref($item) =~ /ARRAY/i) {
+			push @add => join '' => @{$item};
+		}
+		else {
+			push @add => $item;
+		}
+	}
+
 	if ($get_tmpl_file) {
 		$tmpl = $obj->_get_template_from_file($template_name);
-		$tmpl .= join '' => @_;
+		$tmpl .= join '' => @add;
 	}
-	elsif ( @_ and not $append ) {
-		$tmpl = join '' => @_;
+	elsif ( @add and not $append ) {
+		$tmpl = join '' => @add;
 	}
 	else {
 		$tmpl = $KEY{_displays}->{$template_name}
 		  || $obj->_get_template_from_file($template_name);
-		$tmpl .= join '' => @_ if @_;
+		$tmpl .= join '' => @add;
 	}
 	$KEY{_displays}->{$template_name} = $tmpl;
 
@@ -1230,7 +1305,7 @@ sub template ($;@) {
 ##
 ##  The resulting template is then returned.
 
-sub save_template ($;@) {
+sub save_template {
 	my $obj = shift;
 
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
@@ -1318,7 +1393,7 @@ sub _save_template_to_file {
 ## replacing any message already there with that name.
 ## The resulting message is then recursively PROCESSED and output.
 
-sub message ($;@) {
+sub message {
 	my $arg1 = shift;
 
 	local *KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
@@ -1387,8 +1462,7 @@ sub message ($;@) {
 ## The resulting message is also saved in the message file $KEY{_message_file},
 ## replacing any message already there with that name.
 ## The resulting message is then recursively PROCESSED and output.
-
-sub save_message ($;@) {
+sub save_message {
 	my $arg1 = shift;
 
 	local *KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
@@ -1486,7 +1560,7 @@ sub save_message ($;@) {
 ## The resulting list items are then output UNPROCESSED
 ## as list or an array ref, depending on context.
 
-sub list_items ($;@) {
+sub list_items {
 	my $obj = shift;
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
 
@@ -1551,7 +1625,7 @@ sub list_items ($;@) {
 ## The resulting list items are then output UNPROCESSED
 ## as an array ref.
 
-sub save_list_items ($;@) {    # same as save_list; kept for legacy
+sub save_list_items {    # same as save_list; kept for legacy
 	my $obj = shift;
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
 
@@ -1593,7 +1667,7 @@ sub save_list_items ($;@) {    # same as save_list; kept for legacy
 	$KEY{_lists}->{$list_name} = [@items];
 }
 
-sub save_list ($;@) {
+sub save_list {
 	my $obj = shift;
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
 
@@ -1635,7 +1709,7 @@ sub save_list ($;@) {
 	$KEY{_lists}->{$list_name} = [@items];
 }
 
-sub save_sys_list ($;@) {
+sub save_sys_list {
 	my $obj = shift;
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
 
@@ -1759,7 +1833,7 @@ sub _list_from_dir {
 ## The resulting list items are NOT PROCESSED.
 ## The NUMBER of items in the list is returned.
 
-sub num_list_items ($;@) {
+sub num_list_items {
 	my $obj = shift;
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
 
@@ -1809,7 +1883,7 @@ sub num_list_items ($;@) {
 ##		File may be read directly from the filehandle KEY using <KEY>, but
 ##		it's better to use recall().
 
-sub store ($;@) {
+sub store {
 	my $arg1 = shift;
 	local *KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
 
@@ -1818,17 +1892,18 @@ sub store ($;@) {
 			return;
 		}
 		elsif ( $KEY{_file} eq '-' ) {
-			open KEY, "+>>:encoding(UTF8)", undef or return;
+			open *KEY, "+>>:encoding(UTF8)", undef or return;
 		}
 		elsif ( $KEY{_file} eq '^' ) {
 			$KEY{_vfile} ||= '';
-			open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
+			open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
 		}
 		else {
-			open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
+			open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
 		}
 		*KEY{IO}->autoflush;
 	}
+	our $fh	= \*KEY;
 
 	my $tmpl =
 	     join( '' => @_ )
@@ -1837,15 +1912,15 @@ sub store ($;@) {
 
 	my $output = _process_tmpl( \*KEY, $tmpl );
 
-	print KEY $output;
+	print $fh $output;
 
-	close KEY unless $KEY{_file_keep_open};
+	close $fh unless $KEY{_file_keep_open};
 
 	return $output;
 }
 
 # store_file Same as replace, plus all output is written to the filehandle KEY,
-## 		overwriting anything already in the file.
+##		overwriting anything already in the file.
 ##		If no file was specified in the initialization of the object,
 ##		or attached with attach_file() after initialization,
 ##		store() will write to a temporary file if called.
@@ -1856,29 +1931,30 @@ sub store ($;@) {
 ##		File may be read directly from the filehandle KEY using <KEY>, but
 ##		it's better to use recall().
 
-sub store_file ($;@) {
+sub store_file {
 	my $arg1 = shift;
 	local *KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
 
 	if ( defined *KEY{IO} and *KEY{IO}->opened() ) {
-		truncate( KEY, 0 );
+		truncate( *KEY, 0 );
 	}
 	else {
 		if ( !$KEY{_file} ) {
 			return;
 		}
 		elsif ( $KEY{_file} eq '-' ) {
-			open KEY, ">:encoding(UTF8)", undef or return;
+			open *KEY, ">:encoding(UTF8)", undef or return;
 		}
 		elsif ( $KEY{_file} eq '^' ) {
 			$KEY{_vfile} ||= '';
-			open KEY, ">:encoding(UTF8)", \$KEY{_vfile} or return;
+			open *KEY, ">:encoding(UTF8)", \$KEY{_vfile} or return;
 		}
 		else {
-			open KEY, ">:encoding(UTF8)", "$KEY{_file}" or return;
+			open *KEY, ">:encoding(UTF8)", "$KEY{_file}" or return;
 		}
 		*KEY{IO}->autoflush;
 	}
+	my $fh	= \*KEY;
 
 	my $tmpl =
 	     join( '' => @_ )
@@ -1887,9 +1963,9 @@ sub store_file ($;@) {
 
 	my $output = _process_tmpl( \*KEY, $tmpl );
 
-	print KEY $output;
+	print $fh $output;
 
-	close KEY unless $KEY{_file_keep_open};
+	close $fh unless $KEY{_file_keep_open};
 
 	return $output;
 }
@@ -1902,7 +1978,7 @@ sub store_file ($;@) {
 ## contain non-ARRAY/HASH references, and the object's KEY field (holding marked input).
 ## Does not process data, except to provide '' for empty non-zero field values.
 ## Returns a hash of the stored values.
-sub store_data ($;@) {
+sub store_data {
 	my $arg1 = shift;
 	local *KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
 
@@ -1913,17 +1989,18 @@ sub store_data ($;@) {
 			return;
 		}
 		elsif ( $KEY{_file} eq '-' ) {
-			open KEY, "+>>:encoding(UTF8)", undef or return;
+			open *KEY, "+>>:encoding(UTF8)", undef or return;
 		}
 		elsif ( $KEY{_file} eq '^' ) {
 			$KEY{_vfile} ||= '';
-			open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
+			open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
 		}
 		else {
-			open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
+			open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
 		}
 		*KEY{IO}->autoflush;
 	}
+	my $fh	= \*KEY;
 
 	my %_KEY;
 	for my $key ( @_ ? @_ : sort keys %KEY ) {
@@ -1932,7 +2009,7 @@ sub store_data ($;@) {
 		}
 		next if $key eq $KEY{_mark};
 		next if $key eq $KEY{_ui_mark};
-		next if $key =~ /^_/;
+		next if $key =~ /^[_-]/;
 		next if ref( $KEY{$key} ) =~ /(CODE|GLOB)/;
 
 		$_KEY{$key} = defined $KEY{$key} ? $KEY{$key} : '';
@@ -1940,9 +2017,9 @@ sub store_data ($;@) {
 
 	local $Data::Dumper::Purity   = 1;
 	local $Data::Dumper::Sortkeys = 1;
-	print KEY Data::Dumper->Dump( [ \%_KEY ], [qw/*_KEY/] );    #
-	print KEY "\n#=\n";
-	close KEY unless $KEY{_file_keep_open};
+	print $fh Data::Dumper->Dump( [ \%_KEY ], [qw/*_KEY/] );    #
+	print $fh "\n#=\n";
+	close $fh unless $KEY{_file_keep_open};
 	wantarray ? %_KEY : \%_KEY;
 }
 
@@ -1955,7 +2032,7 @@ sub store_data ($;@) {
 ## contain non-ARRAY/HASH references, and the object's KEY field (holding marked input).
 ## Does not process data, except to provide '' for empty/false non-zero field values.
 ## Returns a hash of the stored values.
-sub store_json ($;@) {
+sub store_json {
 	my $arg1 = shift;
 	local *KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
 
@@ -1966,29 +2043,34 @@ sub store_json ($;@) {
 			return;
 		}
 		elsif ( $KEY{_file} eq '-' ) {
-			open KEY, "+>>:encoding(UTF8)", undef or return;
+			open *KEY, "+>>:encoding(UTF8)", undef or return;
 		}
 		elsif ( $KEY{_file} eq '^' ) {
 			$KEY{_vfile} ||= '';
-			open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
+			open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
 		}
 		else {
-			open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
+			open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
 		}
 		*KEY{IO}->autoflush;
 	}
+	my $fh	= \*KEY;
 
 	my %_KEY;
 	for my $key ( @_ ? @_ : sort keys %KEY ) {
 		next if $key eq $KEY{_mark};
-		next if $key =~ /^_(?!meta)/;
+#		next if $key =~ /^_(?!meta)/; # Causes problems 2020-05-03
+		next if $key =~ /^[_-]/;
 		next if ref( $KEY{$key} ) =~ /(CODE|GLOB)/;
 		$_KEY{$key} = defined $KEY{$key} ? $KEY{$key} : '';
 	}
 
-	print KEY encode_json( \%_KEY );
-	print KEY "\n#=\n";
-	close KEY unless $KEY{_file_keep_open};
+	my $json	= '';
+	$json		= eval { encode_json( \%_KEY ) };
+	$json		.= encode_json({'Error' => $@}) if $@;
+	print $fh $json;
+	print $fh "\n#=\n";
+	close $fh unless $KEY{_file_keep_open};
 
 	wantarray ? %_KEY : \%_KEY;
 }
@@ -2001,7 +2083,7 @@ sub store_json ($;@) {
 ## and the object's KEY field (holding marked input).
 ## Does not process data, except to provide '' for empty non-zero field values.
 ## Returns a hash of the stored values.
-sub store_meta ($;@) {
+sub store_meta {
 	my $arg1 = shift;
 	local *KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
 
@@ -2012,22 +2094,23 @@ sub store_meta ($;@) {
 			return;
 		}
 		elsif ( $KEY{_file} eq '-' ) {
-			open KEY, "+>>:encoding(UTF8)", undef or return;
+			open *KEY, "+>>:encoding(UTF8)", undef or return;
 		}
 		elsif ( $KEY{_file} eq '^' ) {
 			$KEY{_vfile} ||= '';
-			open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
+			open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
 		}
 		else {
-			open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
+			open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
 		}
 		*KEY{IO}->autoflush;
 	}
+	my $fh	= \*KEY;
 
 	my %_META;
 	for my $key ( @_ ? @_ : sort keys %KEY ) {
 		next if $key eq $KEY{_mark};
-		next unless $key =~ /^_/;
+		next unless $key =~ /^[_-]/;
 		next if ref( $KEY{$key} ) =~ /(CODE|GLOB)/;
 
 		$_META{$key} = defined $KEY{$key} ? $KEY{$key} : '';
@@ -2036,9 +2119,9 @@ sub store_meta ($;@) {
 	local $Data::Dumper::Purity   = 1;
 	local $Data::Dumper::Deepcopy = 1;
 	local $Data::Dumper::Pair     = ' => ';    # ' : '
-	print KEY Data::Dumper->Dump( [ \%_META ], [qw/*_META/] );
-	print KEY "\n#=\n";
-	close KEY unless $KEY{_file_keep_open};
+	print $fh Data::Dumper->Dump( [ \%_META ], [qw/*_META/] );
+	print $fh "\n#=\n";
+	close $fh unless $KEY{_file_keep_open};
 
 	wantarray ? %_META : \%_META;
 }
@@ -2060,7 +2143,7 @@ sub restore_data {
 
 	my $old_tell;
 	if ( defined *KEY{IO} and *KEY{IO}->opened() ) {
-		$old_tell = tell KEY;
+		$old_tell = tell *KEY;
 	}
 	elsif ( !$KEY{_file} ) {
 		return;
@@ -2070,14 +2153,15 @@ sub restore_data {
 	}
 	elsif ( $KEY{_file} eq '^' ) {
 		$KEY{_vfile} ||= '';
-		open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
-		$old_tell = tell KEY;
+		open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
+		$old_tell = tell *KEY;
 	}
 	else {
-		open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
-		$old_tell = tell KEY;
+		open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
+		$old_tell = tell *KEY;
 	}
-	seek( KEY, 0, 0 );
+
+	seek( *KEY, 0, 0 );
 
 	my %_KEY;
 	my %_KEYS;
@@ -2089,13 +2173,124 @@ sub restore_data {
 		$_KEYS{$_}++ for keys %_KEY;
 		*KEY = { %KEY, %_KEY };
 	}
-	seek KEY, $old_tell, 0;
-	close KEY unless $KEY{_file_keep_open};
+	seek *KEY, $old_tell, 0;
+	close *KEY unless $KEY{_file_keep_open};
 
 	wantarray
 	  ? map { $_ => $KEY{$_} || '' } keys %_KEYS
 	  : { map { $_ => $KEY{$_} || '' } keys %_KEYS };
 }
+
+## recall_data_records: Reads back any data stored in the attached file.
+## Data read back is eval()-ed on the assumption that it is a
+## serialized hash named %_KEY; anything else in the file is ignored, EXCEPT
+## that any statement must eval() OK, including 'strict' requirements.
+## The hash is then added as a hashref copy to an array.
+## Allows multiple serialized hashes to be read in, in the order
+## they were stored, resulting in a set of records in the array,
+## with each successive hash read back from the attached file preserved.
+## Does not process data; does not alter the file.
+## Returns the array of the restored values, either as an array of
+## hashrefs, or as a text block of tab-delimited columns separated by newlines.
+sub recall_data_records {
+	my $arg1 = shift;
+	local *::KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
+
+	local $/ = "\n#=\n";
+
+	my $old_tell;
+	if ( defined *::KEY{IO} and *::KEY{IO}->opened() ) {
+		$old_tell = tell ::KEY;
+	}
+	elsif ( !$::KEY{_file} ) {
+		return;
+	}
+	elsif ( $::KEY{_file} eq '-' ) {
+		return;
+	}
+	elsif ( $::KEY{_file} eq '^' ) {
+		$::KEY{_vfile} ||= '';
+		open ::KEY, "+>>", \$::KEY{_vfile} or return;
+		$old_tell = tell ::KEY;
+	}
+	else {
+		open ::KEY, "+>>", "$::KEY{_file}" or return;
+		$old_tell = tell ::KEY;
+	}
+	seek( ::KEY, 0, 0 );
+
+	my %_KEY;
+	my %_KEYS;
+	my @_KEYS;
+
+	while (<::KEY>) {
+		next unless /^([^`]+)$/;
+		my $d = $1;
+		next unless eval $d;
+		push @_KEYS => {%_KEY};
+		$_KEYS{$_}++ for keys %_KEY;
+	}
+	seek ::KEY, $old_tell, 0;
+	close ::KEY unless $::KEY{_file_keep_open};
+
+	my @header	= sort keys %_KEYS;
+	wantarray
+	  ? @_KEYS
+	  : join "\n" => join("\t" => @header),
+		map { my $k = $_; join "\t" => map { $k->{$_} || '' } @header } @_KEYS ;
+}
+
+## retrieve_data_records:
+## Same as recall_data_records except that it empties the file
+sub retrieve_data_records {
+	my $arg1 = shift;
+	local *::KEY = ref($arg1) eq __PACKAGE__ ? $arg1 : *{$arg1};
+
+	local $/ = "\n#=\n";
+
+	my $old_tell;
+	if ( defined *::KEY{IO} and *::KEY{IO}->opened() ) {
+		$old_tell = tell ::KEY;
+	}
+	elsif ( !$::KEY{_file} ) {
+		return;
+	}
+	elsif ( $::KEY{_file} eq '-' ) {
+		return;
+	}
+	elsif ( $::KEY{_file} eq '^' ) {
+		$::KEY{_vfile} ||= '';
+		open ::KEY, "+>>", \$::KEY{_vfile} or return;
+		$old_tell = tell ::KEY;
+	}
+	else {
+		open ::KEY, "+>>", "$::KEY{_file}" or return;
+		$old_tell = tell ::KEY;
+	}
+	seek( ::KEY, 0, 0 );
+
+	my %_KEY;
+	my %_KEYS;
+	my @_KEYS;
+
+	while (<::KEY>) {
+		next unless /^([^`]+)$/;
+		my $d = $1;
+		next unless eval $d;
+		push @_KEYS => {%_KEY};
+		$_KEYS{$_}++ for keys %_KEY;
+	}
+
+	truncate( ::KEY, 0 );
+	close ::KEY unless $::KEY{_file_keep_open};
+
+	my @header	= sort keys %_KEYS;
+	wantarray
+	  ? @_KEYS
+	  : join "\n" => join("\t" => @header),
+		map { my $k = $_; join "\t" => map { $k->{$_} || '' } @header } @_KEYS ;
+}
+
 
 ## Restore json: Reads back json-formatted data stored in the attached file.
 ## Data read back is json_decode-d into a hash assuming that it is valid json .
@@ -2112,7 +2307,7 @@ sub restore_json {
 
 	my $old_tell;
 	if ( defined *KEY{IO} and *KEY{IO}->opened() ) {
-		$old_tell = tell KEY;
+		$old_tell = tell *KEY;
 	}
 	elsif ( !$KEY{_file} ) {
 		return;
@@ -2122,14 +2317,14 @@ sub restore_json {
 	}
 	elsif ( $KEY{_file} eq '^' ) {
 		$KEY{_vfile} ||= '';
-		open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
-		$old_tell = tell KEY;
+		open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return;
+		$old_tell = tell *KEY;
 	}
 	else {
-		open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
-		$old_tell = tell KEY;
+		open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return;
+		$old_tell = tell *KEY;
 	}
-	seek( KEY, 0, 0 );
+	seek( *KEY, 0, 0 );
 
 	my %_KEY;
 	my %_KEYS;
@@ -2142,8 +2337,8 @@ sub restore_json {
 		$_KEYS{$_}++ for keys %_KEY;
 		*KEY = { %KEY, %_KEY };
 	}
-	seek KEY, $old_tell, 0;
-	close KEY unless $KEY{_file_keep_open};
+	seek *KEY, $old_tell, 0;
+	close *KEY unless $KEY{_file_keep_open};
 
 	wantarray
 	  ? map { $_ => $KEY{$_} || '' } keys %_KEYS
@@ -2167,13 +2362,13 @@ sub retrieve_data {
 		}
 		elsif ( $KEY{_file} eq '^' ) {
 			$KEY{_vfile} ||= '';
-			open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
+			open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
 		}
 		else {
-			open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
+			open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
 		}
 	}
-	seek( KEY, 0, 0 );
+	seek( *KEY, 0, 0 );
 
 	my %_KEY;
 	my %_KEYS;
@@ -2186,8 +2381,8 @@ sub retrieve_data {
 		*KEY = { %KEY, %_KEY };
 	}
 
-	truncate( KEY, 0 );
-	close KEY unless $KEY{_file_keep_open};
+	truncate( *KEY, 0 );
+	close *KEY unless $KEY{_file_keep_open};
 
 	wantarray
 	  ? map { $_ => $KEY{$_} || '' } keys %_KEYS
@@ -2226,19 +2421,19 @@ sub file_data {
 			}
 			elsif ( $KEY{_file} eq '^' ) {
 				$KEY{_vfile} ||= '';
-				open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
-				$old_tell = tell KEY;
+				open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
+				$old_tell = tell *KEY;
 			}
 			else {
-				open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
-				$old_tell = tell KEY;
+				open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
+				$old_tell = tell *KEY;
 			}
 		}
-		seek( KEY, 0, 0 );
+		seek( *KEY, 0, 0 );
 		local $/ = "\n#=\n";
 		@entries = (<KEY>);
-		seek KEY, $old_tell, 0;
-		close KEY unless $KEY{_file_keep_open};
+		seek *KEY, $old_tell, 0;
+		close *KEY unless $KEY{_file_keep_open};
 	}
 	else {
 		return {};
@@ -2259,10 +2454,10 @@ sub file_data {
 
 ## Retrieve: Analogous to flush; reads and returns contents of file
 ## to which store() has written, and empties the file.
-sub retrieve ($) {
+sub retrieve {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	local $/ = undef;
 
@@ -2275,17 +2470,17 @@ sub retrieve ($) {
 		}
 		elsif ( $KEY{_file} eq '^' ) {
 			$KEY{_vfile} ||= '';
-			open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
+			open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
 		}
 		else {
-			open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
+			open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
 		}
 	}
-	seek( KEY, 0, 0 );
+	seek( *KEY, 0, 0 );
 
 	my $retr = <KEY>;
-	truncate( KEY, 0 );
-	close KEY unless $KEY{_file_keep_open};
+	truncate( *KEY, 0 );
+	close *KEY unless $KEY{_file_keep_open};
 	$retr;
 }
 
@@ -2298,10 +2493,10 @@ sub retrieve ($) {
 ## "Lines" are chunks of the file terminated by the
 ## second optional arg, if any, or Perl's $/, usually \n. The
 ## second arg may be any string; it's chomped off.
-sub recall ($;@) {
+sub recall {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my $reverse = shift() ? 1 : 0;
 
@@ -2309,7 +2504,7 @@ sub recall ($;@) {
 
 	my $old_tell;
 	if ( defined *KEY{IO} and *KEY{IO}->opened() ) {
-		$old_tell = tell KEY;
+		$old_tell = tell *KEY;
 	}
 	elsif ( !$KEY{_file} ) {
 		return qq{};
@@ -2318,19 +2513,19 @@ sub recall ($;@) {
 		return qq{};
 	}
 	elsif ( $KEY{_file} eq '^' ) {
-		open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
-		$old_tell = tell KEY;
+		open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
+		$old_tell = tell *KEY;
 	}
 	else {
-		open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
-		$old_tell = tell KEY;
+		open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
+		$old_tell = tell *KEY;
 	}
-	seek( KEY, 0, 0 );
+	seek( *KEY, 0, 0 );
 
 	my @lines = <KEY>;
 
-	seek KEY, $old_tell, 0;
-	close KEY unless $KEY{_file_keep_open};
+	seek *KEY, $old_tell, 0;
+	close *KEY unless $KEY{_file_keep_open};
 
 	chomp @lines;
 
@@ -2353,10 +2548,10 @@ sub recall ($;@) {
 ## third arg may be any string; it's chomped off.
 ## A non-zero value in the fourth arg causes the byte number of
 ## each match to be returned; this may be used by recall_seek().
-sub recall_match ($$;@) {
+sub recall_match {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my $match = shift() or return wantarray ? () : '';
 
@@ -2368,7 +2563,7 @@ sub recall_match ($$;@) {
 
 	my $start_tell;
 	if ( defined *KEY{IO} and *KEY{IO}->opened() ) {
-		$start_tell = tell KEY;
+		$start_tell = tell *KEY;
 	}
 	elsif ( !$KEY{_file} ) {
 		return qq{};
@@ -2377,15 +2572,15 @@ sub recall_match ($$;@) {
 		return qq{};
 	}
 	elsif ( $KEY{_file} eq '^' ) {
-		open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
-		$start_tell = tell KEY;
+		open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
+		$start_tell = tell *KEY;
 	}
 	else {
-		open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
-		$start_tell = tell KEY;
+		open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
+		$start_tell = tell *KEY;
 	}
 
-	seek( KEY, 0, 0 );
+	seek( *KEY, 0, 0 );
 
 	my %matches;
 	my $tell     = 0;
@@ -2397,9 +2592,9 @@ sub recall_match ($$;@) {
 		chomp $line;
 		$matches{$byte_key} = $line;
 	}
-	seek KEY, $start_tell, 0;
+	seek *KEY, $start_tell, 0;
 
-	close KEY unless $KEY{_file_keep_open};
+	close *KEY unless $KEY{_file_keep_open};
 
 	my @keys =
 	  $reverse
@@ -2416,10 +2611,10 @@ sub recall_match ($$;@) {
 
 ## Recall_seek: reads the file to which store()
 ## has written,
-sub recall_seek ($$;@) {
+sub recall_seek {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my $tell = shift() || 0;
 
@@ -2429,7 +2624,7 @@ sub recall_seek ($$;@) {
 
 	my $old_tell;
 	if ( defined *KEY{IO} and *KEY{IO}->opened() ) {
-		$old_tell = tell KEY;
+		$old_tell = tell *KEY;
 	}
 	elsif ( !$KEY{_file} ) {
 		return qq{};
@@ -2438,25 +2633,25 @@ sub recall_seek ($$;@) {
 		return qq{};
 	}
 	elsif ( $KEY{_file} eq '^' ) {
-		open KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
-		$old_tell = tell KEY;
+		open *KEY, "+>>:encoding(UTF8)", \$KEY{_vfile} or return qq{};
+		$old_tell = tell *KEY;
 	}
 	else {
-		open KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
-		$old_tell = tell KEY;
+		open *KEY, "+>>:encoding(UTF8)", "$KEY{_file}" or return qq{};
+		$old_tell = tell *KEY;
 	}
-	seek( KEY, 0, 0 );
+	seek( *KEY, 0, 0 );
 
 	my @matches;
 	for my $t ( ref($tell) ? @{$tell} : ($tell) ) {
-		seek KEY, $t, 0;
+		seek *KEY, $t, 0;
 		my $line = <KEY>;
 		push @matches => $t, $line;
 	}
 
 	chomp @matches;
-	seek KEY, $old_tell, 0;
-	close KEY unless $KEY{_file_keep_open};
+	seek *KEY, $old_tell, 0;
+	close *KEY unless $KEY{_file_keep_open};
 
 	wantarray ? @matches : $matches[$index];
 }
@@ -2470,7 +2665,7 @@ sub recall_seek ($$;@) {
 ## Note: $KEY is left unchanged when other forms/templates are passed
 ## as arguments to replace() etc.
 
-sub form ($;@) {
+sub form {
 	my ( $self, @args ) = @_;
 	local *KEY = *{$self};
 	return ( $KEY || '' ) unless defined $args[0];
@@ -2495,10 +2690,10 @@ sub form ($;@) {
 ## Charge: safely adds data to %KEY, and returns updated ui object.
 ## Over-writes existing fields with the same names, but doesn't
 ## accept any data from fields whose names start with '_'.
-sub charge ($;@) {
+sub charge {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %NEW;
 	{
@@ -2522,10 +2717,10 @@ sub charge ($;@) {
 ## Over-writes existing fields with the same names, but doesn't
 ## accept any data from fields whose names start with '_'.
 ## Removes system end-of-line
-sub charge_chomped ($;@) {
+sub charge_chomped {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %NEW;
 	{
@@ -2547,13 +2742,47 @@ sub charge_chomped ($;@) {
 	return $obj;
 }
 
+## Charge Trimmed: safely adds data to %KEY, and returns updated ui object.
+## Over-writes existing fields with the same names, but doesn't
+## accept any data from fields whose names start with '_'.
+## Removes white space from the end of the value
+
+sub charge_trimmed {
+	my $obj = shift;
+
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+
+	my %NEW;
+	{
+		local $_ = ref( $_[0] );
+		/HASH/ and %NEW = %{ $_[0] }
+		  or /ARRAY/ and %NEW = @{ $_[0] } % 2 ? ( @{ $_[0] }, '' )
+		  : @{ $_[0] }
+		  or /CODE/ and %NEW = %{ $_[0]->() }
+		  or %NEW =
+		  @_ % 2
+		  ? ( @_, '' )
+		  : @_
+	}
+
+	for (keys %NEW) {
+		$NEW{$_} =~ s/\A(.*?)\s*\z/$1/s;
+	}
+
+	%KEY = ( %KEY, map { /^_/ ? () : ( $_ => $NEW{$_} ) } keys %NEW );
+
+	return $obj;
+}
+
+
+
 ## Charge_meta:  safely adds meta-data to %KEY, and returns updated ui object.
 ## Similar to charge, but only accepts data from fields whose names start with '_'.
 ## Over-writes existing fields with same names.
-sub charge_meta ($;@) {
+sub charge_meta {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %NEW;
 	{
@@ -2577,10 +2806,10 @@ sub charge_meta ($;@) {
 ## Similar to charge_meta, but accepts data from fields with any names.
 ## Adds '_' to the start of field names that don't already have it.
 ## Over-writes existing fields with same names.
-sub charge_as_meta ($;@) {
+sub charge_as_meta {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %NEW;
 	{
@@ -2606,7 +2835,7 @@ sub charge_as_meta ($;@) {
 sub charge_sqlite_meta {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	return unless $KEY{_dbh};
 
@@ -2628,10 +2857,10 @@ sub charge_sqlite_meta {
 
 ## Charge_all: safely adds data and meta-data to %KEY, and returns updated ui object.
 ## Over-writes existing fields with the same names.
-sub charge_all ($;@) {
+sub charge_all {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %NEW;
 	{
@@ -2656,10 +2885,10 @@ sub charge_all ($;@) {
 ## an arrayref listing the fields to be changed.
 ## The following args are the values, in order of the listed fields.
 ## Over-writes existing fields with the same names.
-sub charge_these ($;@) {
+sub charge_these {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my $flds = shift();
 	my @flds = ref($flds) ? @{$flds} : split( /\s*,\s*/ => $flds );
@@ -2670,13 +2899,35 @@ sub charge_these ($;@) {
 	return $obj;
 }
 
+## Charge_these_with: safely adds data and meta_data to specified fields of %KEY,
+## and returns updated ui object. The first arg is a comma-separated string or
+## an arrayref listing the fields to be changed.
+## The second arg is the value to be put in all of the fields to be changed.
+## The second arg may be '' or 0 (zero);
+sub charge_these_with {
+	my $obj = shift;
+
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+
+	my $flds = shift();
+	my @flds = ref($flds) ? @{$flds} : split( /\s*,\s*/ => $flds );
+	my $with = shift;
+	my %NEW  = map { $_ => $with } @flds;
+
+	%KEY = ( %KEY, %NEW );
+
+	return $obj;
+}
+
+
+
 ## Charge_auto: executes anonymous sub stored in $KEY{_auto}, and returns updated ui object.
 ## $KEY{_auto} may hold any series of actions, usually including charge methods.
 ## Executed for each UI object by render() just before rendering.
-sub charge_auto ($;@) {
+sub charge_auto {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	$KEY{_auto}
 	  and $KEY{_auto}->();
@@ -2701,31 +2952,30 @@ sub charge_auto ($;@) {
 ## Order of execution:
 ##
 ## Examples:
-# 	$ui->charge(-system_status => sub {
-# 		my $obj	= shift;
-# 		$obj->charge(test_mode_status => ($obj->data('test_mode') ? "Test Mode On" : "Test Mode Off"));
-# 		return $obj->resolve('[:title]: Now at [:state] - [:test_mode_status]');
-# 	});
+#	$ui->charge(-system_status => sub {
+#		my $obj	= shift;
+#		$obj->charge(test_mode_status => ($obj->data('test_mode') ? "Test Mode On" : "Test Mode Off"));
+#		return $obj->resolve('[:title]: Now at [:state] - [:test_mode_status]');
+#	});
 #
-# 	$ui->charge(-admin_test_checkbox => sub {
-# 		my $obj	= shift;
-# 		my ($ses_obj)	= $obj->objects('SES');
-# 		if ($ses_obj->data('group') eq 'admin' and $obj->data('test_mode')) {
-#  			return $ui->process(qq{INPUT=do_test,,c:2,,Test});
-# 		} else {
-# 			return "";
-# 		}
-# 	});
+#	$ui->charge(-admin_test_checkbox => sub {
+#		my $obj	= shift;
+#		my ($ses_obj)	= $obj->objects('SES');
+#		if ($ses_obj->data('group') eq 'admin' and $obj->data('test_mode')) {
+#			return $ui->process(qq{INPUT=do_test,,c:2,,Test});
+#		} else {
+#			return "";
+#		}
+#	});
 #
 ## Calculate() is called by render() for each UI object's '-' flds just before rendering, but after
 ## charge_auto has been called for that object.
-sub calculate ($;@) {
+sub calculate {
 	my $obj = shift;
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
 	my @flds = @_ ? @_ : sort grep { /^-./ } keys %KEY;
 	my $ui_obj = $obj->direct();
 	for my $fld (@flds) {
-
 		# charge with updated COPY of %KEY each time
 		$ui_obj->charge( {%KEY} );
 		my $result;
@@ -2744,19 +2994,16 @@ sub calculate ($;@) {
 		}
 		$ui_obj->clear();
 	}
-
-	# %KEY;
 	return $obj;
 }
 
-sub calculated_data ($;@) {
+sub calculated_data {
 	my $obj = shift;
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
 	my @flds = @_ ? @_ : sort grep { /^-./ } keys %KEY;
 	my $ui_obj = $obj->direct();
 	my @calcflds;
 	for my $fld (@flds) {
-
 		# charge with updated COPY of %KEY each time
 		$ui_obj->charge( {%KEY} );
 		my $result;
@@ -2791,10 +3038,10 @@ sub calculated_data ($;@) {
 ## Over-writes existing fields with same names (including the hyphen).
 ## The result of a calculation will be put in the corresponding data field
 ## named without the starting '-'.
-sub charge_as_calc ($;@) {
+sub charge_as_calc {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %NEW;
 	my $new_type = ref( $_[0] );
@@ -2843,10 +3090,10 @@ sub charge_as_calc ($;@) {
 ## creating $KEY{_msg} if necessary with make_msg().
 ## The first optional arg is a string or a hash reference, following the
 ## requirements of make_msg
-sub charge_msg ($;@) {
+sub charge_msg {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my $arg = shift;
 	$KEY{_msg} ||= make_msg( \*KEY );
@@ -2858,10 +3105,10 @@ sub charge_msg ($;@) {
 
 ## Charge_err: safely stores a message in the internal subroutine $KEY{_err},
 ## creating $KEY{_err} if necessary with make_msg().
-sub charge_err ($;@) {
+sub charge_err {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my $arg = shift;
 	$KEY{_err} ||= make_msg( \*KEY );
@@ -2873,10 +3120,10 @@ sub charge_err ($;@) {
 
 ## Charge_xor: safely adds data and meta-data to %KEY, and returns updated ui object.
 ## Over-writes values in existing fields with the same names only in fields evaluating to false.
-sub charge_xor ($;@) {
+sub charge_xor {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %NEW;
 	{
@@ -2898,10 +3145,10 @@ sub charge_xor ($;@) {
 
 ## Charge_or: safely adds data and meta-data to %KEY, and returns updated ui object.
 ## Does not over-write existing fields with the same names.
-sub charge_or ($;@) {
+sub charge_or {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %NEW;
 	{
@@ -2924,10 +3171,10 @@ sub charge_or ($;@) {
 
 ## Charge_true: safely adds data and meta-data to %KEY, and returns updated ui object.
 ## Over-writes existing fields with the same names only if the new data evaluates to 'true'.
-sub charge_true ($;@) {
+sub charge_true {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %NEW;
 	{
@@ -2964,10 +3211,10 @@ sub charge_true ($;@) {
 ## being charged must resolve to a Perl "false" value. [Use case?]
 ## Only fields of %KEY for which the new values pass the test are updated.
 ## TODO: test by type
-sub charge_valid ($;@) {
+sub charge_valid {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my $test = shift;
 
@@ -3011,10 +3258,10 @@ sub charge_valid ($;@) {
 ## names start with 'MARK:' or 'MARK_', or end with '_MARK' where MARK is $KEY{_mark} (which is 'KEY').
 ## If no argument is given, inserts marked input data stored in $KEY{$KEY{_mark}} (same as $KEY{_vals}).
 ## Over-writes existing fields with same names (with the mark stripped off).
-sub charge_marked ($;@) {
+sub charge_marked {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	unless (@_) {
 		*KEY = { %KEY, %{ $KEY{ $KEY{_mark} } || {} } };
@@ -3051,10 +3298,10 @@ sub charge_marked ($;@) {
 ## SUP->charge_from_input('first'); # stores 'C' in its 'first' field
 ## SUP->charge_from_input('SUP:first'); # stores 'A' in its 'first' field
 ## SUP->charge_from_input('CON:first'); # stores 'B' in its 'CON:first' field
-sub charge_from_input ($;@) {
+sub charge_from_input {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	unless (@_) {
 		return %KEY;
@@ -3083,10 +3330,10 @@ sub charge_from_input ($;@) {
 ## including any meta-data. Substitutions are made using the resolve() method, which
 ## defaults to using _start => '[', _end => ']', _mark => ':', as in, e.g.,
 ## $obj->charge_resolve('settings_file' => '[:system_dir]/settings.config');
-sub charge_resolve ($;@) {
+sub charge_resolve {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %NEW;
 	{
@@ -3115,17 +3362,21 @@ sub charge_resolve ($;@) {
 sub charge_add {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %ADD;
 	return %KEY unless @_;
 
 	my $i = ref( $_[0] );
-	$i =~ /HASH/ and %ADD = %{ $_[0] }
-	  or $i =~ /ARRAY/
-	  and %ADD = @{ $_[0] } % 2 ? ( @{ $_[0] }, '' ) : @{ $_[0] }
-	  or $i =~ /CODE/ and %ADD = %{ $_[0]->() }
-	  or %ADD = @_ % 2 ? ( @_, '' ) : @_;
+	if ($i =~ /HASH/) {
+		%ADD = %{ $_[0] };
+	} elsif ($i =~ /ARRAY/) {
+		%ADD = @{ $_[0] } % 2 ? ( @{ $_[0] }, '' ) : @{ $_[0] };
+	} elsif ($i =~ /CODE/ ) {
+		 %ADD = %{ $_[0]->() };
+	} else {
+		%ADD = @_ % 2 ? ( @_, '' ) : @_;
+	}
 
 	for my $key ( keys %ADD ) {
 		next unless $ADD{$key} =~ /^[+-]?\d+(\.\d*)?$/;
@@ -3137,12 +3388,49 @@ sub charge_add {
 	return $obj;
 }
 
+## Charge_increment. Safely increments numerical or alphabetical data to fields in %KEY,
+## and returns updated ui object. Uses standard Perl incrementing.
+## In mixed alpha-numerical strings, operates on the last (right-most) digits found.
+## An input value ... [what?]
+sub charge_increment {
+	my $obj = shift;
+
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+
+	my $fld	= shift;
+
+	return $obj unless $fld;
+
+	$KEY{$fld}++;
+
+	return $obj;
+}
+
+## Charge_count. Safely increments a numerical value in fields in %KEY,
+## each time it is called adding 1 to the value in the field;
+## and returns updated ui object. Uses standard Perl incrementing.
+## In mixed alpha-numerical strings, operates on the last (right-most) digits found.
+## An input value ... [what?]
+sub charge_count {
+	my $obj = shift;
+
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+
+	my $fld	= shift;
+
+	return $obj unless $fld;
+
+	$KEY{$fld} += 1;
+
+	return $obj;
+}
+
 ## Charge_append. Safely appends data to fields in %KEY, and returns updated ui object.
 ## Note that NO white space or other separator is inserted between the original and appended values.
 sub charge_append {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %ADD;
 	return %KEY unless @_;
@@ -3166,7 +3454,7 @@ sub charge_append {
 sub charge_prepend {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %ADD;
 	return %KEY unless @_;
@@ -3192,7 +3480,7 @@ sub charge_prepend {
 sub charge_push {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %ADD;
 	return %KEY unless @_;
@@ -3232,7 +3520,7 @@ sub charge_push {
 sub charge_fh {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %ADD;
 	return %KEY unless @_;
@@ -3247,7 +3535,7 @@ sub charge_fh {
 	} else {
 		%ADD = @_ % 2 ? ( @_, '' ) : @_;
 	}
-	
+
 	for my $key ( keys %ADD ) {
 		my $ref_key = qq/$key-fh/;
 		if ( $KEY{$ref_key} and ref( $KEY{$ref_key} ) eq 'IO' ) {
@@ -3267,7 +3555,7 @@ sub charge_fh {
 sub charge_fh_gzip {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my %ADD;
 	return %KEY unless @_;
@@ -3302,17 +3590,20 @@ sub charge_fh_gzip {
 ## which holds marked input data.
 ## Fields whose data is deleted receive the value ''.
 ## Meta_data (fieldnames starting with '_') is not deleted.
-sub clear ($;@) {
+## Added 2020-06-29:
+## Calculating fields (fieldnames starting with '-') are not cleared;
+sub clear {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	if (@_) {
-		$KEY{$_} = '' for grep { !/^_/ } @_;
+		$KEY{$_} = '' for grep { !/^[_-]/ } @_;
 	}
 	else {
 		%KEY = map {
-			( /^_/ or $_ eq $KEY{_mark} ) ? ( $_ => $KEY{$_} ) : ( $_ => '' )
+#			( /^_/ or $_ eq $KEY{_mark} ) ? ( $_ => $KEY{$_} ) : ( $_ => '' )
+			( /^[_-]/ or $_ eq $KEY{_mark} ) ? ( $_ => $KEY{$_} ) : ( $_ => '' )
 		} keys %KEY;
 	}
 
@@ -3326,17 +3617,17 @@ sub clear ($;@) {
 ## which holds marked input data.
 ## Fields whose data is deleted receive the value undef.
 ## Meta_data (fieldnames starting with '_') is not deleted.
-sub clear_undef ($;@) {
+sub clear_undef {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	if (@_) {
-		$KEY{$_} = '' for grep { !/^_/ } @_;
+		$KEY{$_} = '' for grep { !/^[_-]/ } @_;
 	}
 	else {
 		%KEY = map {
-			( /^_/ or $_ eq $KEY{_mark} )
+			( /^[_-]/ or $_ eq $KEY{_mark} )
 			  ? ( $_ => $KEY{$_} )
 			  : ( $_ => undef )
 		} keys %KEY;
@@ -3351,17 +3642,17 @@ sub clear_undef ($;@) {
 ## EXCEPT the field named for the object's mark ($KEY{_mark}),
 ## which holds marked input data.
 ## Meta_data (fieldnames starting with '_') is not deleted.
-sub clear_data ($;@) {
+sub clear_data {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	if (@_) {
-		delete $KEY{$_} for grep { !/^_/ } @_;
+		delete $KEY{$_} for grep { !/^[_-]/ } @_;
 	}
 	else {
 		%KEY =
-		  map { ( /^_/ or $_ eq $KEY{_mark} ) ? ( $_ => $KEY{$_} ) : () }
+		  map { ( /^[_-]/ or $_ eq $KEY{_mark} ) ? ( $_ => $KEY{$_} ) : () }
 		  keys %KEY;
 	}
 
@@ -3369,10 +3660,10 @@ sub clear_data ($;@) {
 }
 
 ## Removes selected or all input fields & their values
-sub clear_input ($;@) {
+sub clear_input {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	$KEY{_input}->{$_} = '' for @_ ? @_ : keys %{ $KEY{_input} };
 	delete $KEY{_vals}->{$_} for @_ ? @_ : keys %{ $KEY{_vals} };
@@ -3381,10 +3672,10 @@ sub clear_input ($;@) {
 }
 
 ## Removes selected or all marked input fields & their values
-sub clear_marked_input ($;@) {
+sub clear_marked_input {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	delete $KEY{_vals}->{$_} for @_ ? @_ : keys %{ $KEY{_vals} };
 
@@ -3392,15 +3683,13 @@ sub clear_marked_input ($;@) {
 }
 
 ## Instrospection
-## Call spill on a method to set its results and a B::Deparse view of its source code.
+## Call spill on a method to see its results and a B::Deparse view of its source code.
 ## The first required argument after the invocant is the name of the sub;
 ## the method name should be fully qualified if not in the current namespace.
 ## Any additonal arguments are passed to the named method;
 ## The output is a dump of: the name of the method, its inputs & output, and its source code.
-sub spill ($$;@) {
+sub spill {
 	my $obj	= shift;
-
-	local *KEY = $obj->invert();
 
 	my $sub	= shift;
 
@@ -3422,76 +3711,76 @@ sub spill ($$;@) {
 			process		=> $source
 		},
 		$sub
- 	);
+	);
 }
 
 ## Data Access
-sub list_keys ($;@) {
+sub list_keys {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
-	grep { !/^_/ } keys %KEY;
+	grep { !/^[_-]/ } keys %KEY;
 }
 
-sub list_values ($;@) {
+sub list_values {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
-	map { $KEY{$_} } grep { !/^_/ } keys %KEY;
+	map { $KEY{$_} } grep { !/^[_-]/ } keys %KEY;
 }
 
-sub list_pairs ($;@) {
+sub list_pairs {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
-	map { "$_:  $KEY{$_}" } grep { !/^_/ } keys %KEY;
+	map { "$_:  $KEY{$_}" } grep { !/^[_-]/ } keys %KEY;
 }
 
-sub list_meta_keys ($;@) {
+sub list_meta_keys {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	grep { /^_/ } keys %KEY;
 }
 
-sub list_meta_values ($;@) {
+sub list_meta_values {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	map { $KEY{$_} } grep { /^_/ } keys %KEY;
 }
 
-sub list_meta_pairs ($;@) {
+sub list_meta_pairs {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	map { "$_:  $KEY{$_}" } grep { /^_/ } keys %KEY;
 }
 
-sub data ($;@) {
+sub data {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	wantarray ? map { $KEY{$_} || '' } @_ : $KEY{ $_[0] } || '';
 }
 
-sub fh_data ($;@) {
+sub fh_data {
 	my $obj = shift;
-	local *KEY = $obj->invert();
-	
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+
 	my $fld	= shift || '';
 	return unless $fld;
-	
+
 	my $ref_key = qq/$fld-fh/;
- 	return unless ( $KEY{$ref_key} );
-	my $fh 		= $KEY{$ref_key};
+	return unless ( $KEY{$ref_key} );
+	my $fh		= $KEY{$ref_key};
 	my $oldtell	= tell $fh;
 	seek $fh, 0,0;
 	my @lines = <$fh>;
@@ -3499,79 +3788,79 @@ sub fh_data ($;@) {
 	wantarray ? @lines : join '' => @lines;
 }
 
-sub untainted_data ($;@) {
+sub untainted_data {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
-# 	wantarray ? map { $KEY{$_} =~ /^([^`]+)$/ ? $1 : '' } @_ : $KEY{$_[0]} =~ /^([^`]+)$/ ? $1 : ''
+#	wantarray ? map { $KEY{$_} =~ /^([^`]+)$/ ? $1 : '' } @_ : $KEY{$_[0]} =~ /^([^`]+)$/ ? $1 : ''
 	wantarray ? map { $KEY{$_} =~ /\A([^`]+)\z/ ? $1 : '' } @_
 	  : $KEY{ $_[0] } =~ /\A([^`]+)\z/ ? $1
 	  :                                  '';
 }
 
-sub pairs ($;@) {
+sub pairs {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
-	map { $_ => ( $KEY{$_} || '' ) } grep { !/^_/ } @_ ? @_ : keys %KEY;
+	map { $_ => ( $KEY{$_} || '' ) } grep { !/^[_-]/ } @_ ? @_ : keys %KEY;
 }
 
-sub meta_pairs ($;@) {
+sub meta_pairs {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	map { $_ => $KEY{$_} } grep { /^_/ } @_ ? @_ : keys %KEY;
 }
 
-sub input_data ($;@) {
+sub input_data {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	wantarray ? map { $KEY{_input}->{$_} || '' } @_ : $KEY{_input}->{ $_[0] }
 	  || '';
 }
 
-sub input_keys ($) {
+sub input_keys {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	return keys %{ $KEY{_input} };
 }
 
-sub input_pairs ($;@) {
+sub input_pairs {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	map { $_ => ( $KEY{_input}->{$_} || '' ) } keys %{ $KEY{_input} };
 }
 
-sub marked_input_data ($;@) {
+sub marked_input_data {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	wantarray ? map { $KEY{_vals}->{$_} || '' }
 	  @_ : ( $_[0] ? $KEY{_vals}->{ $_[0] } || '' : '' );
 }
 
-sub marked_input_keys ($) {
+sub marked_input_keys {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	return keys %{ $KEY{_vals} || () };
 }
 
-sub marked_input_pairs ($;@) {
+sub marked_input_pairs {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	@_
 	  ? map { $_ => ( defined $KEY{_vals}->{$_} ? $KEY{_vals}->{$_} : '' ) }
@@ -3579,34 +3868,34 @@ sub marked_input_pairs ($;@) {
 	  : %{ $KEY{_vals} || {} };
 }
 
-sub input ($) {
+sub input {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	$KEY{_input};
 }
 
-sub marked_input ($) {
+sub marked_input {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	$KEY{_vals};
 }
 
-sub uploads ($;@) {
+sub uploads {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	$KEY{_uploads} || {};
 }
 
-sub num_uploads ($;@) {
+sub num_uploads {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	$KEY{_input}->{_num_uploads} || 0;
 }
@@ -3614,7 +3903,7 @@ sub num_uploads ($;@) {
 sub uploads_by_field {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	my @flds = @_ ? @_ : keys %{ $KEY{_uploads} };
 	my @uploads =
@@ -3622,10 +3911,10 @@ sub uploads_by_field {
 	return wantarray ? @uploads : $uploads[0];
 }
 
-sub request ($) {
+sub request {
 	my $obj = shift;
 
-	local *KEY = $obj->invert();
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
 
 	$KEY{_request};
 }
@@ -3766,9 +4055,9 @@ sub get_system_lists {
 		local $/ = '';
 		while (<$LISTS>) {
 			my ( $list_name, $list ) = split "\n" => $_, 2;
-# 			next unless $list_name =~ s/^\s*([a-zA-Z0-9_][^\n]+)\s*$/$1/;
+#			next unless $list_name =~ s/^\s*([a-zA-Z0-9_][^\n]+)\s*$/$1/;
 			next unless $list_name =~ s/^\s*(\w[^\n]+)\s*$/$1/;
-# 			my @items = split "\n" => $list;
+#			my @items = split "\n" => $list;
 			my @items = split /\n/ => $list;
 			@items = map { defined && /\A\s*([^`]+)\s*\z/ ? $1 : () } @items;
 			$sys_lists{$list_name} = [@items];
@@ -3789,9 +4078,9 @@ sub load_system_lists {
 		local $/ = '';
 		while (<$LISTS>) {
 			my ( $list_name, $list ) = split "\n" => $_, 2;
-# 			next unless $list_name =~ s/^\s*([a-zA-Z0-9_][^\n]+)\s*$/$1/;
+#			next unless $list_name =~ s/^\s*([a-zA-Z0-9_][^\n]+)\s*$/$1/;
 			next unless $list_name =~ s/^\s*(\w[^\n]+)\s*$/$1/;
-# 			my @items = split "\n" => $list;
+#			my @items = split "\n" => $list;
 			my @items = split /\n/ => $list;
 			@items = map { defined && /\A\s*([^`]+)\s*\z/ ? $1 : () } @items;
 			$sys_lists{$list_name} = [@items];
@@ -3815,7 +4104,7 @@ sub load_system_lists {
 # Returns false if the named list doesn't exist;
 # If no list name is provided, returns a hash ref with all lists
 # as keys and each list's boolean lookup as their values;
-sub listed ($;@) {
+sub listed {
 	my $obj = shift;
 	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : *{$obj};
 
@@ -3845,6 +4134,7 @@ sub listed ($;@) {
 # Make list of all available templates by reading display directory globbing on '*.tmpl'
 sub get_templates {
 	my $self = shift;
+
 	ref($self) eq __PACKAGE__ or unshift @_, $self;
 
 	my $display_dir = shift;
@@ -3853,7 +4143,7 @@ sub get_templates {
 	my %templates;
 	for my $file ( glob "$display_dir/*.tmpl" ) {
 		my $name = $file;
-# 		$name =~ s{^.*\/(.*)\.tmpl$} {$1};
+#		$name =~ s{^.*\/(.*)\.tmpl$} {$1};
 		$name =~ s{^ .* / (.*) [.] tmpl $} {$1}x;
 		$templates{$name}->{name} = $name;
 		$templates{$name}->{file} = $file;
@@ -3870,18 +4160,18 @@ sub get_templates {
 			$templates{$name}->{display} = '_NA_';
 		}
 
-# 		$templates{$name}->{display}	= do {
-# 			if ($templates{$name}->{file} =~ /_NOFILE_/) {
-# 				'_NA_'
-# 			} else {
-# 				local $/;
-# 				unless ( open D, "<", $templates{$name}->{file} ) {
-# 					'_NA_'
-# 				} else {
-# 					<D>
-# 				}
-# 			}
-# 		};
+#		$templates{$name}->{display}	= do {
+#			if ($templates{$name}->{file} =~ /_NOFILE_/) {
+#				'_NA_'
+#			} else {
+#				local $/;
+#				unless ( open D, "<", $templates{$name}->{file} ) {
+#					'_NA_'
+#				} else {
+#					<D>
+#				}
+#			}
+#		};
 
 		$templates{$name}->{reveal} = do {
 			my $tmpl = "\n" . $templates{$name}->{display};
@@ -3945,18 +4235,18 @@ sub get_displays {
 			$display_data{$_}->{display} = '_NA_';
 		}
 
-		# 		$display_data{$_}->{display}	= do {
-		# 											if ($display_data{$_}->{file} =~ /_NOFILE_/) {
-		# 												'_NA_'
-		# 											} else {
-		# 												local $/;
-		# 												unless ( open D, "<", $display_data{$_}->{file} ) {
-		# 													'_NA_'
-		# 												} else {
-		# 												 	<D>
-		# 												}
-		# 											}
-		# 										};
+		#		$display_data{$_}->{display}	= do {
+		#											if ($display_data{$_}->{file} =~ /_NOFILE_/) {
+		#												'_NA_'
+		#											} else {
+		#												local $/;
+		#												unless ( open D, "<", $display_data{$_}->{file} ) {
+		#													'_NA_'
+		#												} else {
+		#													<D>
+		#												}
+		#											}
+		#										};
 		#next unless $display_data{$_}->{display};
 		$display_data{$_}->{reveal} = do {
 			my $tmpl = "\n" . $display_data{$_}->{display};
@@ -4012,8 +4302,9 @@ qq{ INSERT INTO me VALUES name=>$new_display;note=>$display_note WITH id_overrid
 ##				-- for secondary output
 sub reset_header {
 	my $self = shift();
-# 	my $ui   = $self->object( $self->data('_ui_mark') );
+
 	my $ui   = $self->object();
+
 	$ui->charge_meta( _hdr_prntd => 0 );
 
 	1;
@@ -4021,8 +4312,9 @@ sub reset_header {
 
 sub header_status {
 	my ( $self, $status ) = @_;
-# 	my $ui = $self->object( $self->data('_ui_mark') );
+
 	my $ui = $self->object();
+
 	if ( $status and $status =~ /^\s*([a-zA-Z0-9]+)\s*$/ ) {
 		my $hdr_status = $1;
 		$ui->charge_meta( _hdr_prntd => $hdr_status );
@@ -4030,7 +4322,7 @@ sub header_status {
 	return $ui->data('_hdr_prntd');
 }
 
-sub ask ($;@) {
+sub ask {
 	my $arg1 = shift;
 	ref($arg1) eq __PACKAGE__ or unshift @_, $arg1;
 	my $text  = shift() || $arg1->process("MSG") || '';
@@ -4135,7 +4427,7 @@ EDIT_ASK
 	exit;
 }
 
-sub holdit ($;@) {
+sub holdit {
 	my $arg1 = shift;
 	ref($arg1) eq __PACKAGE__ or unshift @_, $arg1;
 	my $text      = shift();
@@ -4195,9 +4487,11 @@ EDIT_ASK
 	exit;
 }
 
-sub oops ($;@) {
+sub oops {
 	my $self = shift();
-	local *KEY = $self->invert();    # invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
+
 	my $text   = shift();
 	my $title  = shift() || 'Oops!';
 	my $mark   = $self->data('_mark');
@@ -4242,9 +4536,11 @@ EDIT_OOPS
 	exit;
 }
 
-sub hey ($;@) {
+sub hey {
 	my $self = shift();
-	local *KEY = $self->invert();    # invert($self);
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
+
 	my $ref   = shift()    || ( $KEY{_mark} eq $KEY{_ui_mark} ? \%KEY : \*KEY );
 	my $env   = $KEY{_env} || 'htm';
 	my $title = shift()    || 'Hey!';
@@ -4315,7 +4611,8 @@ TERM_HEY
 sub wut {
 	my $self = shift();
 	local *KEY = ref($self) eq __PACKAGE__ ? $self : *{$self};
-	use B qw(perlstring);
+#	use B qw(perlstring);
+	require B; # qw(perlstring);
 
 	my $env = $KEY{_env} || 'htm';
 	my $ref   = shift() || ( $KEY{_mark} eq $KEY{_ui_mark} ? \%KEY : \*KEY );
@@ -4335,7 +4632,7 @@ sub wut {
 	else {
 		$output = $ref;
 	}
-	my $perl_output	= perlstring($output);
+	my $perl_output	= B::perlstring($output);
 	if ( $env eq 'htm' ) {
 		return <<HT;
 	<section id="report">
@@ -4365,7 +4662,7 @@ HT
 
 }
 
-sub oh ($;@) {
+sub oh {
 	my $self = shift();
 	local *KEY = ref($self) eq __PACKAGE__ ? $self : *{$self};
 	my $env = $KEY{_env} || 'htm';
@@ -4546,7 +4843,7 @@ EDIT_HEY
 	}
 }
 
-sub oh_data ($;@) {
+sub oh_data {
 	my $self = shift();
 	local *KEY	= ref($self) eq __PACKAGE__ ? $self : *{$self};
 	my $env		= $KEY{_env} || 'htm';
@@ -4728,10 +5025,10 @@ EDIT_HEY
 	}
 }
 
-sub reveal ($;@) {
+sub reveal {
 	my $self = shift();
-	local *KEY =
-	  $self->invert();    #ref($self) eq __PACKAGE__ ? $self : *{ $self };
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{ $self };
 
 	my $tmpl =
 	     join( '' => @_ )
@@ -4794,7 +5091,7 @@ qr{(?s:((\Q${start}${mark}\E)[: ]((.(?!${start_pat}${mark_pat}))*?)\Q$end\E))};
 					$token			= BVA::KALE::UTILS::HTML_entify($token);
 					$form			= BVA::KALE::UTILS::HTML_entify($form);
 
-# 					push @renderlines => qq{\n$token\n<blockquote><b>\n$form\n</b></blockquote>\n};
+#					push @renderlines => qq{\n$token\n<blockquote><b>\n$form\n</b></blockquote>\n};
 					push @renderlines => qq{\n$token\n<blockquote>\n<pre><b>\n$form\n</b></pre></blockquote>\n};
 					push( @{ $used_objects{_names} } => $mark) unless $used_objects{$mark}++;
 					push( @{ $cycles{$cycles{_cycle_num}}{_names} } => $mark) unless $cycles{$cycles{_cycle_num}}{$mark}++;
@@ -4866,9 +5163,10 @@ HEY
 
 }
 
-sub unveil ($;@) {
+sub unveil {
 	my $self = shift();
-	local *KEY = ref($self) eq __PACKAGE__ ? $self : *{$self};
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
 
 	my $tmpl =
 	     join( '' => @_ )
@@ -4931,7 +5229,7 @@ qr{(?s:((\Q${start}${mark}\E)[: ]((.(?!${start_pat}${mark_pat}))*?)\Q$end\E))};
 					$token			= BVA::KALE::UTILS::HTML_entify($token);
 					$form			= BVA::KALE::UTILS::HTML_entify($form);
 
-# 					push @renderlines => qq{\n$token\n<blockquote><b>\n$form\n</b></blockquote>\n};
+#					push @renderlines => qq{\n$token\n<blockquote><b>\n$form\n</b></blockquote>\n};
 					push @renderlines => qq{\n$token\n<blockquote>\n<pre><b>\n$form\n</b></pre></blockquote>\n};
 					push( @{ $used_objects{_names} } => $mark) unless $used_objects{$mark}++;
 					push( @{ $cycles{$cycles{_cycle_num}}{_names} } => $mark) unless $cycles{$cycles{_cycle_num}}{$mark}++;
@@ -5004,18 +5302,135 @@ HEY
 	return $hey;
 }
 
+sub unveil_term {
+	my $self = shift();
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
+
+	my $tmpl =
+	     join( '' => @_ )
+	  || $KEY
+	  || $KEY{_default_tmpl};
+	my $starting_tmpl	= $tmpl;
+	my $output = ' ';
+
+	my @objects = objects(*KEY);
+
+  LOAD: {
+		foreach my $obj (@objects) {
+			$obj->charge_auto();
+			$obj->calculate();
+		}
+	}
+
+	## Temporarily disable header block
+	my $temp_hdr_status = $self->header_status();
+	$self->reset_header;
+
+	# Make sure nesting works across UI objects
+	my %starts;
+	my $start_pat = '('
+	  . join( '|' => map { qq{\Q$_\E} }
+		grep { !$starts{$_}++ } map { $_->data('_start') } @objects )
+	  . ')';
+	my $mark_pat =
+	  '(' . join( '|' => map { $_->data('_mark') } @objects ) . ')';
+	my %cycles = ( _cycle_num => 1 );
+	my @renderlines;
+	my %used_objects;
+	use vars qw/*REV/;
+  RENDER: {
+		push @renderlines =>
+qq{\n---------------\nCycle $cycles{_cycle_num}:\n---------------\n};
+		foreach my $obj (@objects) {
+			local *REV = *{$obj};
+			defined &REV
+			  or *REV = \&OUTPUT;
+
+			my ( $start, $end, $mark ) =
+			  $obj->data( '_start', '_end', '_mark' );
+			push @renderlines => qq{\nProcess:\nMark\tStart\tEnd\n},
+			  qq{$mark\t$start\t$end},
+			  qq{\n};
+			$REV{_match_str} =
+qr{(?s:((\Q${start}${mark}\E)[: ]((.(?!${start_pat}${mark_pat}))*?)\Q$end\E))};
+
+		  GO: {
+				my $str = $tmpl;
+				study $str;
+				$str =~ s{$REV{_match_str}}
+				   {
+					my ($t,$token)	= ($1,$1);
+					my $arg			= $3;
+					my $out			= REV($obj, $arg);
+					$out			||= ($REV{__DONE__} ? $out : OUTPUT($obj, $arg));
+					$out			||= (delete $REV{__DONE__} ? $out : $t);
+					my $form		= $out;
+
+					push @renderlines => qq{\n$token\n\t$form\n\n};
+					push( @{ $used_objects{_names} } => $mark) unless $used_objects{$mark}++;
+					push( @{ $cycles{$cycles{_cycle_num}}{_names} } => $mark) unless $cycles{$cycles{_cycle_num}}{$mark}++;
+					$out;
+				}gsex;    # $form			=~ s/\n/<br>\n/g;
+				last GO if $str eq $tmpl;
+				$tmpl = $str and redo GO;
+			}
+			push @renderlines => qq{\n};
+		}
+		last RENDER if $output eq $tmpl;
+		$cycles{_cycle_num}++;
+		$output = $tmpl and redo RENDER;
+	}
+
+	# Restore header status
+	$self->header_status($temp_hdr_status);
+
+	my $title = '** Rendering Steps **';
+	my $revelation =
+	  join "" =>
+	  qq{\n---------------\nStarting Template:\n---------------\n$starting_tmpl\n---------------\n},
+	  join( "  " => "Objects available:", map { $_->data('_mark') } @objects ),
+	  qq{\nProcessing Done:\n$cycles{_cycle_num} cycles },
+	  qq{rendering from }, scalar @{ $used_objects{_names} },
+	  qq{ of the available objects },
+	  join( ' ' => '(', @{ $used_objects{_names} }, ")\n" ),
+	  map(
+		{ qq{Cycle $_ }
+			  . join( ' ' => '(', @{ $cycles{$_}{_names} }, ")\n" ) }
+		sort grep { !/^_cycle_num$/ } keys %cycles ),
+	  qq{\n},
+	  @renderlines,
+	  qq{\n---------------\n},
+	  qq{Final Rendering:\n---------------\n},
+	  qq{\n},
+	  $output,
+	  qq{\n};
+
+	my $hey = <<HEY;
+$title
+$revelation
+
+HEY
+
+	return $hey;
+}
+
+
+
 ## Test Subroutines
 
 sub dumpit {
 	my $self = shift();
-	local *KEY = ref($self) eq __PACKAGE__ ? $self : *{$self};
+
+	local *KEY = ref($self) eq __PACKAGE__ ? $self : \*{$self};
+
 	my $env = $KEY{_env} || 'htm';
 
 	my $ref    = shift() || ( $KEY{_mark} eq $KEY{_ui_mark} ? \%KEY : \*KEY );
 	my $pure   = shift();
 	my $output = '';
 
-	# 	use Data::Dumper;
+	#	use Data::Dumper;
 	local $Data::Dumper::Purity   = length($pure) ? $pure : 1;
 	local $Data::Dumper::Deparse  = 1;
 	local $Data::Dumper::Sortkeys = 1;
@@ -5023,12 +5438,128 @@ sub dumpit {
 	#no warnings;
 	eval { $output = Dumper($ref); 1 }
 	  or do {
-	  	my $prob	= $@;
-	  	$output .= "\nDumper problem: \n$prob"; };
+		my $prob	= $@;
+		$output .= "\nDumper problem: \n$prob"; };
 	if ($env =~ /htm|psgi/i) {
 		$output = "<pre>\n" . $self->HTML_entify($output) . "\n</pre>"
 	}
 	return "\n$output\n";
+}
+
+## Message convenience methods
+
+sub msgNew {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_msg} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_msg}->("new: $new");
+}
+
+sub msgAdd {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_msg} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_msg}->("add: $new");
+}
+
+sub msgLine {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_msg} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_msg}->("add: \n$new");
+}
+
+sub msgLog {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_msg} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_msg}->("log: $new");
+}
+
+sub msgSay {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_msg} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_msg}->("print: $new\n");
+}
+
+sub msgOr {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_msg} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_msg}->("or: $new");
+}
+
+sub msgMsg {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_msg} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_msg}->("msg: $new");
+}
+
+## Error Message convenience methods
+
+sub errNew {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_err} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_err}->("new: $new");
+}
+
+sub errAdd {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_err} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_err}->("add: $new");
+}
+
+sub errLine {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_err} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_err}->("add: \n$new");
+}
+
+sub errLog {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_err} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_err}->("log: $new");
+}
+
+sub errSay {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_err} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_err}->("print: $new");
+}
+
+sub errOr {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_err} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_err}->("or: $new");
+}
+
+sub errMsg {
+	my $obj	= shift;
+	local *KEY = ref($obj) eq __PACKAGE__ ? $obj : \*{$obj};
+	$KEY{_err} ||= make_msg( \*KEY );
+	my $new		= shift || '';
+	return $KEY{_err}->("msg: $new");
 }
 
 ## Generate message closures
@@ -5042,8 +5573,10 @@ sub dumpit {
 ## $msg->("msg: msg_name, ...");	#looks up msg_name, inserts any message plus '...'
 ##  $msg->({msg => msg_name});
 ## Used by charge_msg() and charge_err().
-sub make_msg ($;@) {
-
+## See also convenience methods:
+## msgNew msgAdd msgLine msgLog msgSay msgOr msgMsg
+## errNew errAdd errLine errLog errSay errOr errMsg
+sub make_msg {
 	# $key may be a UI object or typeglob (*KEY)
 	my $key = shift;
 	my $default_msg = shift || '';
@@ -5055,10 +5588,15 @@ sub make_msg ($;@) {
 		my $time = BVA::KALE::DATETIME::tell_time('iso');
 		my ( $command, $add_msg ) = ref($in) ? %{$in} : split /: /, $in, 2;
 		$add_msg and $add_msg =~ s/\<time\>/$time/ge;
+		$add_msg	||= '';
 
-		if ( $command =~ /^print/i ) {
+		if ( $command =~ /^new/i ) {
+			$msg_holder = $add_msg;
+			return join ' ' => grep { $_ } $default_msg, $msg_holder;
+		}
+		elsif ( $command =~ /^print/i ) {
 			$msg_holder .= $add_msg;
-			return qq|$default_msg $msg_holder|;
+			return join ' ' => grep { $_ } $default_msg, $msg_holder;
 		}
 		elsif ( $command =~ /^add/i ) {
 			$msg_holder .= $add_msg;
@@ -5066,7 +5604,8 @@ sub make_msg ($;@) {
 		}
 		elsif ( $command =~ /^msg/i ) {
 			my ( $msg_name, $msg ) = split /\s*,\s*/ => $add_msg, 2;
-			$msg_holder = message( $key, $msg_name ) . ( $msg || '' );
+#			$msg_holder = message( $key, $msg_name ) . ( $msg || '' );
+			$msg_holder	= join ' ' => grep { $_ } $msg_holder, message( $key, $msg_name ), ( $msg || '' );
 			return $msg_holder;
 		}
 		elsif ( $command =~ /^or/i ) {
@@ -5076,7 +5615,7 @@ sub make_msg ($;@) {
 		elsif ( $command =~ /^log/i ) {
 			$msg_holder .= qq|\n$time $add_msg|;
 			$msg_holder =~ s/<br>//i;
-			return qq|$time $default_msg $msg_holder|;
+			return join ' ' => grep { $_ } $time, $default_msg, $msg_holder;
 		}
 		else {
 			$msg_holder = $in;
@@ -5091,7 +5630,7 @@ sub DESTROY {
 	#	my $self = shift;
 	#	local *KEY = ref($me) eq __PACKAGE__ ? $me : *{ $me };
 	#	local *KEY = *{ $self };
-	#	close KEY if defined *KEY{IO};
+	#	close *KEY if defined *KEY{IO};
 	#	print qq{$KEY{_mark}\n};
 	#	print qq{\n<!--[ Goodbye from $pm v. $VERSION]-->\n};
 	#	return qq{[ Goodbye from $pm v. $BVA::KALE::VERSION ]};

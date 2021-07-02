@@ -4,29 +4,33 @@ $BVA::KALE::OUT::VERSION	= '3.0'; # 2015-08-28 bva@cruzio.com
 
 use strict;
 use warnings;
+use open IO => ':encoding(utf8)';
+use open ':std';
 
 use vars qw/*KEY *OUT/;
-# our ($KEY, @KEY, %KEY); # KEY
-# our ($OUT, @OUT, %OUT); # KEY
 
 # UI Dispatch
+
 sub OUT {
 	my $obj				= shift;
 
-    ## How is the value found in the template parsed?
-    ## Here, it's subroutine[=arguments_as_string].
-    ## Or, subroutine[:arguments_as_string]
-    ## Or, subroutine[ is arguments_as_string]    # or ... IS ...
     my $tmpl			= shift();
 
+   ## How is the value found in the template parsed?
+	## NOTE: sep may be any of [ '=', ':', ' is ', or ' IS ' ]
+	## sep may be preceded or followed by optional white space
+    ## Here, it's subroutine[=arguments_as_string].
+    ## Or, subroutine[:arguments_as_string]
+    ## Or, subroutine[ is arguments_as_string]
+    ## Or, subroutine[ IS arguments_as_string]
 	# Three scalars here; 3rd arg of split is 2 because sep is being captured
     my ($sub, $sep, $arg)	= split(/\s*(=| is |:)\s*/i => $tmpl => 2);
 
     ## Make sure $arg is defined, and trim trailing whitespace
-    $arg			= defined $arg ? $arg : '';
+    $arg			= defined($arg) ? $arg : '';  # $arg //= '';
     $arg			=~ s/^(.*?)\s*$/$1/;
 
-    ## Give $obj & $arg back to @_ for sub called with goto
+    ## Give $obj & $arg back to @_ for sub to be called with goto
     unshift @_, $obj, $arg;
 
     ## Normalize sub names to lower case
@@ -43,29 +47,19 @@ sub OUT {
 	# 2012-11-25 new version
 	# Changes:
 	# 1. $OUT{_subname_} uses the _env subname if that sub is defined; previously,
-	#    _subname_ was always the plain subname even if the _env sub as used.
+	#    _subname_ was always the plain subname even if the _env sub was used.
 	# 2. If no defined sub is found, $OUT{null_sub} rather than $OUT{_subname_}
 	#    is defined as sub { return }.
 
 	# 2015: Added use of _out_env if available (output environment)
 	my $env			= exists ${ *$obj }{_out_env} ? ${ *$obj }{_out_env} : ${ *$obj }{_env};
 	my $sub_env		= $sub . '_' . $env;
-# 	my $out_sub		= $OUT{$sub_env} || $OUT{$sub} || do {
-# 		defined &{ 'main::' . $sub_env } ?
-# 			$OUT{$sub_env}	= \&{ 'main::' . $sub_env } :
-# 		defined &{ 'main::' . $sub } ?
-# 			$OUT{$sub}	= \&{ 'main::' . $sub } :
-# 		defined &{ $sub_env } ?
-# 			$OUT{$sub_env}	= \&{ $sub_env } :
-# 		defined &{ $sub } ?
-# 			$OUT{$sub}	= \&{ $sub } :
-# 		$OUT{null_sub} ||= sub { return }
-# 	};
 
 	# 2015-08-28 new version
 	# Changes:
-	# 1. Separated determination of sub name from assigning sub to $OUT{sub_name}
-	# 2. Added tracking of sub usage in @OUT, with template call & sub name
+	# 1. Separated determination of sub name from memoizing sub in $OUT{sub_name}.
+	# 2. Added tracking of sub usage in @OUT, with template call & sub name.
+	# 3. null_sub is no longer needed because sub { return } is the ternary fallback.
 	my $out_sub_name		= do {
 		if (defined &{ 'main::' . $sub_env }) {
 			'main::' . $sub_env;
@@ -513,21 +507,23 @@ sub display {
 
 	$arg				||= '';
 	my $display			= '';
-
 	# $arg may be '', to allow displays to be named _$KEY{_env} -- e.g., _htm
-	$display			= $KEY{_displays}->{"${arg}_$KEY{_env}"}
-							|| $KEY{_displays}->{"${arg}.$KEY{_env}"}
+	my $env				= $KEY{_env} || '';
+
+	$display			= $KEY{_displays}->{"${arg}_$env"}
+							|| $KEY{_displays}->{"${arg}.$env"}
 								|| $KEY{_displays}->{$arg}
-									|| $obj->template("-${arg}_$KEY{_env}")
-										|| $obj->template("-${arg}.$KEY{_env}")
-											|| $obj->template("-$arg");
+									|| $obj->template("-${arg}_$env")
+										|| $obj->template("-${arg}.$env")
+											|| $obj->template("-$arg")
+												|| '';
 	# $alt may NOT be ''
 	if (!$display && $alt) {
-		$display			= $KEY{_displays}->{"${alt}_$KEY{_env}"}
-								|| $KEY{_displays}->{"${alt}.$KEY{_env}"}
+		$display			= $KEY{_displays}->{"${alt}_$env"}
+								|| $KEY{_displays}->{"${alt}.$env"}
 									|| $KEY{_displays}->{$alt}
-										|| $obj->template("-${alt}_$KEY{_env}")
-											|| $obj->template("-${alt}.$KEY{_env}")
+										|| $obj->template("-${alt}_$env")
+											|| $obj->template("-${alt}.$env")
 												|| $obj->template("-$alt");
 	}
 
